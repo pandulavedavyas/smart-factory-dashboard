@@ -1,19 +1,14 @@
 {
   "version": 2,
-  "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": ".",
+  "buildCommand": "cd frontend-react && npm install && npm run build",
+  "outputDirectory": "frontend/static/dist",
   "functions": {
     "api/index.py": {
-      "runtime": "python3.12",
-      "memory": 512,
       "maxDuration": 30
     }
   },
-  "routes": [
-    { "src": "/static/(.*)", "dest": "/frontend/static/$1" },
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "src": "/(.*\\.html)", "dest": "/api/index.py" },
-    { "src": "/(auth|dashboard|login|workers|machinery|production|materials|analytics|predictions|reports|settings|datasets|logout)(.*)?", "dest": "/api/index.py" },
-    { "src": "/(.*)", "dest": "/api/index.py" }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
