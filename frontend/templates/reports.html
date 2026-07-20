@@ -1,0 +1,55 @@
+<!DOCTYPE html><html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Reports - AI Smart Factory</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/styles.css">
+</head><body>
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon"><i class="fas fa-industry"></i></div>
+    <div><h2>Smart Factory</h2><small>AI Analytics Platform</small></div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="sidebar-section">Main</div>
+    <a href="/dashboard" class="nav-item" data-page="dashboard"><i class="fas fa-th-large"></i>Dashboard</a>
+    <a href="/datasets" class="nav-item" data-page="datasets"><i class="fas fa-database"></i>Datasets</a>
+    <a href="/analytics" class="nav-item" data-page="analytics"><i class="fas fa-chart-line"></i>Analytics</a>
+    <a href="/ml" class="nav-item" data-page="ml"><i class="fas fa-brain"></i>ML Models</a>
+    <div class="sidebar-section">Insights</div>
+    <a href="/chatbot" class="nav-item" data-page="chatbot"><i class="fas fa-robot"></i>AI Chatbot</a>
+    <a href="/reports" class="nav-item" data-page="reports"><i class="fas fa-file-alt"></i>Reports</a>
+    <div class="sidebar-section">System</div>
+    <a href="/settings" class="nav-item" data-page="settings"><i class="fas fa-cog"></i>Settings</a>
+  </div>
+</div>
+<div class="main-content">
+<div class="topbar">
+  <button class="topbar-btn d-md-none" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="fas fa-bars"></i></button>
+  <div class="topbar-search"><i class="fas fa-search" style="color:var(--text-muted);font-size:13px"></i><input type="text" placeholder="Search machines, datasets, reports..." id="globalSearch"></div>
+  <div class="topbar-actions">
+    <button class="topbar-btn" onclick="toggleTheme()"><i class="fas fa-moon" id="themeIcon"></i></button>
+    <button class="topbar-btn" onclick="window.location.href='/chatbot'"><i class="fas fa-robot"></i></button>
+    <button class="topbar-btn"><i class="fas fa-bell"></i><span class="dot" style="background:var(--accent-red)"></span></button>
+    <img src="https://ui-avatars.com/api/?name=Admin+User&background=3b82f6&color=fff&size=36" class="avatar" alt="User">
+  </div>
+</div>
+<div class="page-content">
+  <div class="page-header"><div><h1><span class="gradient-text">Reports</span></h1><p class="breadcrumb"><a href="/">Home</a> / Reports</p></div>
+    <div class="d-flex gap-3">
+      <select class="form-control" style="width:160px" id="reportType"><option value="daily">Daily Report</option><option value="monthly">Monthly Report</option><option value="machine">Machine Report</option><option value="prediction">Prediction Report</option></select>
+      <button class="btn btn-primary" onclick="generateReport()"><i class="fas fa-file-export"></i>Generate</button>
+      <button class="btn btn-secondary" onclick="exportCSV()"><i class="fas fa-file-csv"></i>Export CSV</button>
+    </div>
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">Generated Reports</span></div>
+    <div class="table-container"><table><thead><tr><th>Type</th><th>Title</th><th>Format</th><th>Created</th><th>Actions</th></tr></thead><tbody id="reportsTable"><tr><td colspan="5" class="text-center"><div class="loading-bar"></div></td></tr></tbody></table></div>
+  </div>
+</div></div>
+<script>const PAGE="reports";</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/reports.js"></script>
+</body></html>

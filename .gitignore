@@ -1,0 +1,23 @@
+# Dependencies & Virtual Environments
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Build outputs
+frontend/static/dist/
+dist/
+build/
+
+# Environment & Credentials
+.env
+.env.local
+firebase-credentials.json
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.agents/

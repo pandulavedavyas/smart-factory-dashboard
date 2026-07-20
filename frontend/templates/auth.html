@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sign In - AI Smart Factory</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#060d18;--accent:#1e90ff;--green:#00d68f;--red:#ff6b6b;--text:#e8edf5;--muted:#5a6d8a;--card:rgba(18,30,51,0.6);--border:rgba(30,144,255,0.08);--font:'Inter',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--font);background:var(--primary);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:auto;position:relative;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(30,144,255,0.06) 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(99,102,241,0.04) 0%,transparent 50%);pointer-events:none;}
+.grid-bg{position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px);background-size:40px 40px;}
+.auth-wrap{position:relative;z-index:1;width:100%;max-width:440px;padding:20px;}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px 32px 32px;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.4);}
+.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:24px;}
+.logo .icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),#6366f1);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;}
+.logo h2{font-size:18px;font-weight:700;}
+.logo small{display:block;font-size:10px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;}
+
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,0.03);padding:4px;border-radius:12px;margin-bottom:24px;}
+.tab{flex:1;padding:10px;text-align:center;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;font-family:var(--font);transition:.3s;}
+.tab.active{background:var(--card);color:var(--accent);}
+.tab:hover{color:var(--text);}
+
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;}
+.form-control{width:100%;padding:12px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:var(--font);outline:none;transition:.3s;}
+.form-control:focus{border-color:var(--accent);box-shadow:0 0 20px rgba(30,144,255,0.1);}
+.form-control::placeholder{color:#3a4a5a;}
+
+.form-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;}
+.form-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);}
+.form-row label{font-size:12px;color:var(--muted);cursor:pointer;}
+.form-row a{margin-left:auto;font-size:12px;color:var(--accent);text-decoration:none;}
+
+.btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),#6366f1);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);transition:.3s;box-shadow:0 4px 15px rgba(30,144,255,0.3);}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(30,144,255,0.4);}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+.btn-google{width:100%;padding:13px;background:rgba(255,255,255,0.06);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);transition:.3s;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;}
+.btn-google:hover{background:rgba(255,255,255,0.1);border-color:rgba(30,144,255,0.2);transform:translateY(-1px);}
+.btn-google svg{width:20px;height:20px;}
+
+.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);font-size:11px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.role-selector{display:flex;gap:8px;margin-bottom:20px;}
+.role-btn{flex:1;padding:10px 8px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-align:center;font-size:11px;font-weight:600;font-family:var(--font);transition:.3s;}
+.role-btn i{display:block;font-size:18px;margin-bottom:4px;}
+.role-btn:hover{border-color:rgba(30,144,255,0.2);color:var(--text);}
+.role-btn.active{background:rgba(30,144,255,0.1);border-color:var(--accent);color:var(--accent);}
+
+.alert{padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px;display:none;}
+.alert.error{display:block;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.2);color:var(--red);}
+.alert.success{display:block;background:rgba(0,214,143,0.1);border:1px solid rgba(0,214,143,0.2);color:var(--green);}
+
+.auth-footer{text-align:center;margin-top:20px;font-size:12px;color:var(--muted);}
+.auth-footer a{color:var(--accent);text-decoration:none;cursor:pointer;}
+.auth-footer a:hover{text-decoration:underline;}
+
+.spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.back-link{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;margin-bottom:20px;}
+.back-link:hover{color:var(--text);}
+
+@media(max-width:480px){.auth-card{padding:24px 20px;}.role-selector{flex-direction:column;}}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Back to Home</a>
+    <div class="logo">
+      <div class="icon"><i class="fas fa-industry"></i></div>
+      <div><h2>Smart Factory</h2><small>AI Analytics Platform</small></div>
+    </div>
+
+    <div class="tabs" id="authTabs">
+      <button class="tab active" onclick="switchTab('login')">Sign In</button>
+      <button class="tab" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <div id="alertBox" class="alert"></div>
+
+    <!-- LOGIN FORM -->
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="role-selector">
+        <div class="role-btn active" data-role="worker" onclick="selectRole(this,'login')"><i class="fas fa-hard-hat"></i>Worker</div>
+        <div class="role-btn" data-role="manager" onclick="selectRole(this,'login')"><i class="fas fa-user-tie"></i>Manager</div>
+        <div class="role-btn" data-role="admin" onclick="selectRole(this,'login')"><i class="fas fa-user-shield"></i>Admin</div>
+      </div>
+
+      <button type="button" class="btn-google" onclick="signInWithGoogle()">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sign in with Google
+      </button>
+
+      <div class="divider">or sign in with email</div>
+
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" class="form-control" id="loginEmail" placeholder="you@factory.com" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" class="form-control" id="loginPassword" placeholder="Enter your password" required>
+      </div>
+      <div class="form-row">
+        <input type="checkbox" id="rememberMe" checked>
+        <label for="rememberMe">Remember me</label>
+        <a href="#" onclick="handleForgotPassword();return false;">Forgot Password?</a>
+      </div>
+      <button type="submit" class="btn-primary" id="loginBtn">
+        <span id="loginBtnText">Sign In</span>
+        <div class="spinner" id="loginSpinner"></div>
+      </button>
+      <div class="auth-footer">
+        Don't have an account? <a href="#" onclick="switchTab('register');return false;">Register</a>
+      </div>
+    </form>
+
+    <!-- REGISTER FORM -->
+    <form id="registerForm" style="display:none" onsubmit="handleRegister(event)">
+      <div class="role-selector">
+        <div class="role-btn active" data-role="worker" onclick="selectRole(this,'register')"><i class="fas fa-hard-hat"></i>Worker</div>
+        <div class="role-btn" data-role="manager" onclick="selectRole(this,'register')"><i class="fas fa-user-tie"></i>Manager</div>
+        <div class="role-btn" data-role="admin" onclick="selectRole(this,'register')"><i class="fas fa-user-shield"></i>Admin</div>
+      </div>
+
+      <button type="button" class="btn-google" onclick="signInWithGoogle()">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sign in with Google
+      </button>
+
+      <div class="divider">or register with email</div>
+
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" class="form-control" id="regName" placeholder="John Smith" required>
+      </div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" class="form-control" id="regEmail" placeholder="you@factory.com" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" class="form-control" id="regPassword" placeholder="Min 6 characters" required minlength="6">
+      </div>
+      <button type="submit" class="btn-primary" id="regBtn">
+        <span id="regBtnText">Create Account</span>
+        <div class="spinner" id="regSpinner"></div>
+      </button>
+      <div class="auth-footer">
+        Already have an account? <a href="#" onclick="switchTab('login');return false;">Sign In</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Firebase SDKs (compat for signInWithPopup) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="/static/js/firebase-config.js"></script>
+
+<script>
+let selectedRole = 'worker';
+const API = '/api';
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tabs .tab')[tab === 'login' ? 0 : 1].classList.add('active');
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+  hideAlert();
+}
+
+function selectRole(el) {
+  el.closest('.role-selector').querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  selectedRole = el.dataset.role;
+}
+
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.className = 'alert ' + type;
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+function hideAlert() { document.getElementById('alertBox').style.display = 'none'; }
+
+function setLoading(btn, spinner, text, loading) {
+  document.getElementById(btn).disabled = loading;
+  document.getElementById(text).style.display = loading ? 'none' : 'inline';
+  document.getElementById(spinner).style.display = loading ? 'inline-block' : 'none';
+}
+
+async function loginWithBackend(idToken, email, fullName) {
+  const body = { email: email, password: 'firebase-auth', role: selectedRole };
+  if (idToken) body.id_token = idToken;
+  if (fullName) body.full_name = fullName;
+
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Login failed');
+  localStorage.setItem('sf_token', data.token);
+  localStorage.setItem('sf_user', JSON.stringify(data.user));
+  window.location.href = '/dashboard';
+}
+
+async function signInWithGoogle() {
+  hideAlert();
+  try {
+    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
+      showAlert('Firebase SDK not loaded. Check console for config errors.', 'error');
+      return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    const result = await firebase.auth().signInWithPopup(provider);
+    const user = result.user;
+    const token = await user.getIdToken();
+    showAlert('Signed in with Google! Redirecting...', 'success');
+    await loginWithBackend(token, user.email, user.displayName);
+  } catch(err) {
+    const code = err.code || '';
+    const msg = err.message || '';
+    console.error('Google sign-in error:', code, msg, err);
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      showAlert('Sign-in cancelled.', 'error');
+    } else if (code === 'auth/popup-blocked') {
+      showAlert('Popup blocked by browser. Allow popups for this site and try again.', 'error');
+    } else if (code === 'auth/operation-not-allowed') {
+      showAlert('Google sign-in is not enabled for this project. Go to Firebase Console → Authentication → Sign-in method → enable Google. Then use email/password to sign in for now.', 'error');
+    } else if (code === 'auth/unauthorized-domain') {
+      showAlert('This domain is not authorized. Go to Firebase Console → Authentication → Settings → Authorized domains → add "localhost". Then try again.', 'error');
+    } else if (code === 'auth/api-key-not-valid.-please-pass-a-valid-api-key.' || code.includes('api-key')) {
+      showAlert('Invalid Firebase API key. Check your Firebase config.', 'error');
+    } else {
+      showAlert('Google sign-in failed [' + code + ']: ' + msg, 'error');
+    }
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  hideAlert();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) return showAlert('Please fill in all fields', 'error');
+
+  setLoading('loginBtn', 'loginSpinner', 'loginBtnText', true);
+
+  try {
+    let idToken = null;
+    let displayName = null;
+    const fbReady = typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0;
+    if (fbReady) {
+      try {
+        const cred = await firebase.auth().signInWithEmailAndPassword(email, password);
+        idToken = await cred.user.getIdToken();
+        displayName = cred.user.displayName;
+      } catch(fbErr) {
+        console.log('Firebase auth failed, using backend auth:', fbErr.code);
+      }
+    }
+    await loginWithBackend(idToken, email, displayName);
+  } catch(err) {
+    showAlert(err.message || 'Login failed', 'error');
+    setLoading('loginBtn', 'loginSpinner', 'loginBtnText', false);
+  }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  hideAlert();
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  if (!name || !email || !password) return showAlert('Please fill in all fields', 'error');
+
+  setLoading('regBtn', 'regSpinner', 'regBtnText', true);
+
+  try {
+    const fbReady = typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0;
+    if (fbReady) {
+      try {
+        const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName: name });
+        const token = await cred.user.getIdToken();
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, full_name: name, role: selectedRole, id_token: token })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        localStorage.setItem('sf_token', data.token);
+        localStorage.setItem('sf_user', JSON.stringify(data.user));
+        showAlert('Account created! Redirecting...', 'success');
+        setTimeout(() => window.location.href = '/dashboard', 1000);
+        return;
+      } catch(fbErr) {
+        console.log('Firebase register failed, using backend:', fbErr.code);
+      }
+    }
+
+    const res = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, full_name: name, role: selectedRole })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+    localStorage.setItem('sf_token', data.token);
+    localStorage.setItem('sf_user', JSON.stringify(data.user));
+    showAlert('Account created! Redirecting...', 'success');
+    setTimeout(() => window.location.href = '/dashboard', 1000);
+  } catch(err) {
+    showAlert(err.message || 'Registration failed', 'error');
+    setLoading('regBtn', 'regSpinner', 'regBtnText', false);
+  }
+}
+
+async function handleForgotPassword() {
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email) return showAlert('Enter your email first', 'error');
+
+  if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
+    try {
+      await firebase.auth().sendPasswordResetEmail(email);
+      showAlert('Password reset email sent! Check your inbox.', 'success');
+      return;
+    } catch(e) {
+      showAlert('Could not send reset email: ' + (e.message || e.code), 'error');
+      return;
+    }
+  }
+  showAlert('Firebase not configured for password reset.', 'error');
+}
+
+// Check for existing session on load
+(function() {
+  const token = localStorage.getItem('sf_token');
+  const user = localStorage.getItem('sf_user');
+  if (token && user) {
+    window.location.href = '/dashboard';
+  }
+})();
+</script>
+</body>
+</html>
