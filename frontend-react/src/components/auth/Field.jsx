@@ -8,12 +8,13 @@ export function Field({ label, type = 'text', icon, value, onChange, placeholder
         )}
         <input
           type={type}
-          className={`input ${icon ? '!pl-10' : ''}`}
+          className={`input text-white ${icon ? '!pl-10' : ''}`}
           placeholder={placeholder}
           value={value}
           onChange={onChange}
           required={required}
           autoComplete={autoComplete}
+          style={{ color: '#FFFFFF' }}
         />
       </div>
     </div>

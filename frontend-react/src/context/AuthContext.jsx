@@ -21,14 +21,48 @@ export function AuthProvider({ children }) {
     return () => { active = false; };
   }, []);
 
-  const login = async (email, password, options = {}) => {
-    const res = await authService.login({ email, password, role: options.role || 'worker', remember: options.rememberMe });
+  const login = async (arg1, password, options = {}) => {
+    let payload = {};
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      payload = {
+        email: arg1.email,
+        password: arg1.password,
+        role: arg1.role || 'worker',
+        remember: arg1.rememberMe ?? arg1.remember ?? true
+      };
+    } else {
+      payload = {
+        email: arg1,
+        password,
+        role: options.role || 'worker',
+        remember: options.rememberMe ?? options.remember ?? true
+      };
+    }
+    const res = await authService.login(payload);
     if (res.success) { setUser(res.user); setRole(res.user.role); }
     return res;
   };
 
-  const register = async (full_name, email, password, options = {}) => {
-    const res = await authService.register({ full_name, email, password, role: options.role || 'worker', remember: options.rememberMe });
+  const register = async (arg1, email, password, options = {}) => {
+    let payload = {};
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      payload = {
+        full_name: arg1.full_name,
+        email: arg1.email,
+        password: arg1.password,
+        role: arg1.role || 'worker',
+        remember: arg1.rememberMe ?? arg1.remember ?? true
+      };
+    } else {
+      payload = {
+        full_name: arg1,
+        email,
+        password,
+        role: options.role || 'worker',
+        remember: options.rememberMe ?? options.remember ?? true
+      };
+    }
+    const res = await authService.register(payload);
     if (res.success) { setUser(res.user); setRole(res.user.role); }
     return res;
   };
