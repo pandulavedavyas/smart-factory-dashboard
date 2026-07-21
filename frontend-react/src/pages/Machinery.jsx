@@ -1,591 +1,351 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeCollection, saveMachine, deleteMachine, toggleMachinePower, updateMachineStatus } from '../services/firestoreService';
-import { STEEL_ZONES } from '../services/steelDataSeed';
+import { subscribeCollection, saveMachine, deleteMachine } from '../services/firestoreService';
 import { useToast } from '../context/ToastContext';
 
+const STEEL_ZONES = [
+  'All Zones',
+  'Raw Material Intake',
+  'Blast Furnace Area',
+  'Steel Converter Bay',
+  'Continuous Caster Line',
+  'Hot Rolling Mill',
+  'Inspection & QA'
+];
+
 export default function Machinery() {
+  const { showToast } = useToast();
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [zoneFilter, setZoneFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(9);
+  // Filters & View Mode
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedZone, setSelectedZone] = useState('All Zones');
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [viewMode, setViewMode] = useState('cards');
 
-  // Drawer states
+  // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState({
-    machineName: '',
     machineId: '',
-    zone: STEEL_ZONES[0],
-    operator: 'Unassigned',
+    machineName: '',
+    zone: 'Hot Rolling Mill',
+    temperature: 68.5,
     status: 'Running',
-    power: 'ON',
-    temperature: 650,
-    workingHours: 1200,
-    health: 90,
-    efficiency: 95.0,
-    lastMaintenance: '2026-07-01'
+    health: 94,
+    workingHours: 4500,
+    assignedOperator: 'James Wilson',
+    currentShift: 'Morning',
+    lastMaintenance: new Date().toISOString().slice(0, 10)
   });
 
-  const { showToast } = useToast();
-
   useEffect(() => {
-    // Real-time Firestore subscription to 'machines'
-    const unsubscribe = subscribeCollection('machines', (data) => {
+    let unsubscribe = subscribeCollection('machines', (data) => {
       setMachines(data);
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
-  const handlePowerToggle = async (machineId, currentPower) => {
-    const nextPower = currentPower === 'OFF' ? 'ON' : 'OFF';
+  // Control Actions
+  const handleToggleStatus = async (machine) => {
+    const newStatus = machine.status === 'Running' ? 'Idle' : 'Running';
     try {
-      await toggleMachinePower(machineId, nextPower);
-      showToast(nextPower === 'OFF' ? `Machine ${machineId} powered OFF. Alert generated!` : `Machine ${machineId} powered ON. Operations resumed.`, nextPower === 'OFF' ? 'error' : 'success');
+      await saveMachine({ ...machine, status: newStatus });
+      showToast(`${machine.machineName} status set to ${newStatus}`);
     } catch (err) {
-      showToast('Error toggling machine power', 'error');
+      showToast('Failed to toggle status', 'error');
     }
   };
 
-  const handleStatusChange = async (machineId, newStatus) => {
+  const handleRestartMachine = async (machine) => {
+    showToast(`Restart signal sent to ${machine.machineName}...`);
     try {
-      await updateMachineStatus(machineId, newStatus);
-      showToast(`Machine ${machineId} state updated to ${newStatus}`);
+      await saveMachine({ ...machine, status: 'Running', health: Math.min(100, machine.health + 2) });
+      showToast(`${machine.machineName} restarted successfully`, 'success');
     } catch (err) {
-      showToast('Error updating machine status', 'error');
+      showToast('Restart command failed', 'error');
     }
   };
 
-  // Search & Filter
+  const handleScheduleMaintenance = async (machine) => {
+    try {
+      await saveMachine({ ...machine, status: 'Maintenance', lastMaintenance: new Date().toISOString().slice(0, 10) });
+      showToast(`Maintenance scheduled for ${machine.machineName}`, 'warning');
+    } catch (err) {
+      showToast('Failed to schedule maintenance', 'error');
+    }
+  };
+
   const filteredMachines = machines.filter(m => {
-    const matchesSearch = (m.machineName || '').toLowerCase().includes(search.toLowerCase()) ||
-                          (m.machineId || '').toLowerCase().includes(search.toLowerCase()) ||
-                          (m.operator || '').toLowerCase().includes(search.toLowerCase()) ||
-                          (m.stageName || '').toLowerCase().includes(search.toLowerCase());
-    const matchesZone = zoneFilter === 'All' || m.zone === zoneFilter;
-    const matchesStatus = statusFilter === 'All' || m.status === statusFilter;
+    const matchesSearch = (m.machineName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (m.machineId || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesZone = selectedZone === 'All Zones' || m.zone === selectedZone;
+    const matchesStatus = selectedStatus === 'All' || m.status === selectedStatus;
     return matchesSearch && matchesZone && matchesStatus;
   });
 
-  // Pagination
-  const indexOfLastRow = currentPage * rowsPerPage;
-  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentRows = filteredMachines.slice(indexOfFirstRow, indexOfLastRow);
-  const totalPages = Math.max(1, Math.ceil(filteredMachines.length / rowsPerPage));
-
-  const handleRowClick = (mach) => {
-    setSelectedMachine(mach);
-    setFormState({ ...mach });
-    setIsEditing(false);
-    setIsDrawerOpen(true);
-  };
-
   const handleCreateNewClick = () => {
     setSelectedMachine(null);
-    const idNum = machines.length + 1;
+    const nextNum = machines.length + 1;
     setFormState({
+      machineId: `M-00${nextNum}`,
       machineName: '',
-      machineId: `MCH-${idNum < 10 ? '00' + idNum : idNum < 100 ? '0' + idNum : idNum}`,
-      zone: STEEL_ZONES[0],
-      operator: 'Unassigned',
+      zone: 'Hot Rolling Mill',
+      temperature: 65.0,
       status: 'Running',
-      power: 'ON',
-      temperature: 450,
-      workingHours: 0,
-      health: 100,
-      efficiency: 98.0,
+      health: 95,
+      workingHours: 1200,
+      assignedOperator: 'James Wilson',
+      currentShift: 'Morning',
       lastMaintenance: new Date().toISOString().slice(0, 10)
     });
-    setIsEditing(true);
     setIsDrawerOpen(true);
   };
 
-  const handleDelete = async (machId) => {
-    if (window.confirm(`Are you sure you want to remove machine ${machId}?`)) {
-      try {
-        await deleteMachine(machId);
-        showToast('Machine removed from registry successfully');
-        setIsDrawerOpen(false);
-      } catch (err) {
-        showToast('Failed to delete machine', 'error');
-      }
-    }
+  const handleEditClick = (machine) => {
+    setSelectedMachine(machine);
+    setFormState({ ...machine });
+    setIsDrawerOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await saveMachine(formState);
-      showToast(selectedMachine ? 'Machine telemetry updated' : 'Machine registered successfully');
+      showToast(selectedMachine ? 'Machine config updated' : 'New equipment added to Firestore');
       setIsDrawerOpen(false);
     } catch (err) {
-      showToast('Error saving machine parameters', 'error');
+      showToast('Error saving machine record', 'error');
     }
   };
 
-  const renderStatus = (status, power) => {
-    if (power === 'OFF' || status === 'Offline') {
-      return <span className="status-badge status-down">🔴 OFF / Offline</span>;
-    }
-    switch (status) {
-      case 'Running':
-        return <span className="status-badge status-running">🟢 Running</span>;
-      case 'Idle':
-        return <span className="status-badge status-idle">🟡 Idle</span>;
-      case 'Maintenance':
-        return <span className="status-badge status-warning">🟠 Maintenance</span>;
-      default:
-        return <span className="status-badge status-down">⚪ Offline</span>;
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
+        <div className="w-10 h-10 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--border-color)', borderTopColor: 'var(--primary)' }} />
+        <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Loading equipment diagnostics...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-xl font-bold text-white tracking-tight uppercase">Steel Equipment Telemetry & Controls</h1>
-          <p className="text-xs" style={{ color: '#8899AA' }}>Real-time telemetry monitoring and manual machine power controls for 35+ steel manufacturing units.</p>
-        </motion.div>
-
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-page-title" style={{ color: 'var(--text-main)' }}>Equipment Telemetry & Control</h1>
+          <p className="text-card-label" style={{ color: 'var(--text-secondary)' }}>Monitor thermal diagnostics, operating hours, health gauges, and hardware controls.</p>
+        </div>
         <div className="flex items-center gap-3">
-          {/* View Mode Switcher */}
-          <div className="flex items-center p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <button 
-              onClick={() => setViewMode('grid')} 
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-[#0066FF] text-white' : 'text-[#8899AA]'}`}
-            >
-              <i className="fas fa-grip mr-1.5" /> Control Cards
+          <div className="flex items-center p-1 rounded-xl border" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+            <button onClick={() => setViewMode('cards')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'cards' ? 'bg-[var(--primary)] text-white shadow-md' : 'text-[var(--text-secondary)]'}`}>
+              <i className="fas fa-grip mr-1.5" /> Cards
             </button>
-            <button 
-              onClick={() => setViewMode('table')} 
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-[#0066FF] text-white' : 'text-[#8899AA]'}`}
-            >
-              <i className="fas fa-list mr-1.5" /> Table View
+            <button onClick={() => setViewMode('table')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-[var(--primary)] text-white shadow-md' : 'text-[var(--text-secondary)]'}`}>
+              <i className="fas fa-list mr-1.5" /> Table
             </button>
           </div>
-
-          <button 
-            onClick={handleCreateNewClick}
-            className="btn-primary flex items-center gap-2"
-          >
+          <button onClick={handleCreateNewClick} className="btn-primary-saas">
             <i className="fas fa-plus text-xs" />
-            <span>Register Equipment</span>
+            <span>Add Equipment</span>
           </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Toolbar */}
-      <div className="glass-card-premium p-4 flex flex-col md:flex-row md:items-center gap-4 justify-between">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#556677' }} />
-          <input 
-            type="text" 
-            className="input !pl-10 !py-2.5 w-full text-xs"
-            placeholder="Search Machine Name, ID, Operator, or Stage..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+      {/* Filter Bar */}
+      <div className="saas-card !p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--text-secondary)' }} />
+          <input
+            placeholder="Search machine name, ID..."
+            className="input-saas !pl-10 !py-2 text-xs"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-
-        {/* Dropdowns */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Zone Filter</span>
-            <select 
-              className="filter-select text-xs font-semibold"
-              value={zoneFilter}
-              onChange={(e) => { setZoneFilter(e.target.value); setCurrentPage(1); }}
-            >
-              <option value="All">All Zones</option>
-              {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Status</span>
-            <select 
-              className="filter-select text-xs font-semibold"
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            >
-              <option value="All">All Statuses</option>
-              <option value="Running">Running</option>
-              <option value="Idle">Idle</option>
-              <option value="Maintenance">Maintenance</option>
-              <option value="Offline">Offline</option>
-            </select>
-          </div>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <select className="input-saas !py-2 text-xs w-full sm:w-auto" value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)}>
+            {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+          </select>
+          <select className="input-saas !py-2 text-xs w-full sm:w-auto" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+            <option value="All">All Statuses</option>
+            <option value="Running">Running</option>
+            <option value="Idle">Idle</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
         </div>
       </div>
 
-      {/* Content Rendering (Grid View or Table View) */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <div className="w-8 h-8 border-2 border-white/[0.04] border-t-[#00E5FF] rounded-full animate-spin" />
-          <span className="text-xs" style={{ color: '#8899AA' }}>Syncing equipment telemetry...</span>
-        </div>
-      ) : filteredMachines.length === 0 ? (
-        <div className="glass-card-premium text-center py-16">
-          <i className="fas fa-microchip text-2xl mb-3 text-[#FFB340]" />
-          <p className="text-xs font-bold text-white uppercase tracking-wider">No Machinery Found</p>
-          <p className="text-[10px] mt-1" style={{ color: '#556677' }}>No connected hardware logs match the active parameters.</p>
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {currentRows.map((mach) => (
-            <MachineControlCard
-              key={mach.machineId || mach.id}
-              machine={mach}
-              onRowClick={() => handleRowClick(mach)}
-              onPowerToggle={handlePowerToggle}
-              onStatusChange={handleStatusChange}
-              renderStatus={renderStatus}
-            />
-          ))}
+      {/* MACHINERY VIEW MODE */}
+      {viewMode === 'cards' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredMachines.map((m) => {
+            const statusClass = m.status === 'Running' ? 'saas-badge-running' : m.status === 'Idle' ? 'saas-badge-idle' : 'saas-badge-down';
+
+            return (
+              <div key={m.machineId || m.id} className="saas-card flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-xs font-mono font-bold" style={{ color: 'var(--secondary-blue)' }}>{m.machineId}</span>
+                    <span className={`saas-badge ${statusClass}`}>{m.status}</span>
+                  </div>
+
+                  <h3 className="text-section-title" style={{ color: 'var(--text-main)' }}>{m.machineName}</h3>
+                  <span className="text-card-label block" style={{ color: 'var(--text-secondary)' }}>Zone: {m.zone}</span>
+
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t text-center" style={{ borderColor: 'var(--border-color)' }}>
+                    <div className="p-2.5 rounded-xl border" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest block" style={{ color: 'var(--text-secondary)' }}>Core Temp</span>
+                      <span className="text-sm font-bold mt-0.5 block" style={{ color: 'var(--warning)' }}>{m.temperature}°C</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl border" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest block" style={{ color: 'var(--text-secondary)' }}>Health Gauge</span>
+                      <span className="text-sm font-bold mt-0.5 block" style={{ color: m.health >= 85 ? 'var(--success)' : 'var(--warning)' }}>{m.health}%</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-xs">
+                    <div className="flex justify-between" style={{ color: 'var(--text-secondary)' }}>
+                      <span>Operator:</span>
+                      <span className="font-semibold" style={{ color: 'var(--text-main)' }}>{m.assignedOperator}</span>
+                    </div>
+                    <div className="flex justify-between" style={{ color: 'var(--text-secondary)' }}>
+                      <span>Hours Logged:</span>
+                      <span className="font-semibold" style={{ color: 'var(--text-main)' }}>{m.workingHours} Hrs</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CONTROL BUTTONS TOOLBAR */}
+                <div className="pt-3 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border-color)' }}>
+                  <button
+                    onClick={() => handleToggleStatus(m)}
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                      m.status === 'Running' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    }`}
+                  >
+                    <i className={`fas ${m.status === 'Running' ? 'fa-pause' : 'fa-play'} mr-1`} />
+                    {m.status === 'Running' ? 'Pause' : 'Start'}
+                  </button>
+
+                  <button
+                    onClick={() => handleRestartMachine(m)}
+                    className="flex-1 py-1.5 rounded-xl text-xs font-bold border transition-all"
+                    style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)', color: 'var(--primary-blue)' }}
+                  >
+                    <i className="fas fa-rotate-right mr-1" /> Restart
+                  </button>
+
+                  <button
+                    onClick={() => handleScheduleMaintenance(m)}
+                    className="py-1.5 px-3 rounded-xl text-xs font-bold border transition-all text-red-500 bg-red-500/10 border-red-500/20"
+                    title="Schedule Maintenance"
+                  >
+                    <i className="fas fa-screwdriver-wrench" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        /* Table View */
-        <div className="glass-card-premium p-1">
-          <div className="table-container">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th>Machine Name</th>
-                  <th>Zone & Stage</th>
-                  <th>Operator</th>
-                  <th>Status</th>
-                  <th>Temperature</th>
-                  <th>Working Hours</th>
-                  <th>Health</th>
-                  <th>Efficiency</th>
-                  <th>Power Switch</th>
+        <div className="saas-table-container">
+          <table className="saas-table">
+            <thead>
+              <tr>
+                <th>Machine ID</th>
+                <th>Machine Name</th>
+                <th>Zone</th>
+                <th>Core Temp</th>
+                <th>Health Gauge</th>
+                <th>Operating Hours</th>
+                <th>Operator</th>
+                <th>Status</th>
+                <th className="text-right">Control Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMachines.map((m) => (
+                <tr key={m.machineId || m.id}>
+                  <td className="font-mono text-xs font-bold" style={{ color: 'var(--secondary-blue)' }}>{m.machineId}</td>
+                  <td className="font-bold" style={{ color: 'var(--text-main)' }}>{m.machineName}</td>
+                  <td>{m.zone}</td>
+                  <td className="font-bold" style={{ color: 'var(--warning)' }}>{m.temperature}°C</td>
+                  <td className="font-bold" style={{ color: m.health >= 85 ? 'var(--success)' : 'var(--warning)' }}>{m.health}%</td>
+                  <td>{m.workingHours} Hrs</td>
+                  <td>{m.assignedOperator}</td>
+                  <td>
+                    <span className={`saas-badge ${m.status === 'Running' ? 'saas-badge-running' : m.status === 'Idle' ? 'saas-badge-idle' : 'saas-badge-down'}`}>
+                      {m.status}
+                    </span>
+                  </td>
+                  <td className="text-right space-x-2">
+                    <button onClick={() => handleToggleStatus(m)} className="btn-icon-saas !w-8 !h-8 inline-flex">
+                      <i className={`fas ${m.status === 'Running' ? 'fa-pause' : 'fa-play'} text-xs`} />
+                    </button>
+                    <button onClick={() => handleEditClick(m)} className="btn-icon-saas !w-8 !h-8 inline-flex">
+                      <i className="fas fa-pen text-xs" />
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {currentRows.map((mach) => {
-                  const isOff = mach.power === 'OFF' || mach.status === 'Offline';
-                  return (
-                    <tr 
-                      key={mach.machineId || mach.id} 
-                      className="hover:bg-white/[0.02]"
-                    >
-                      <td className="text-xs font-bold text-white flex items-center gap-2 cursor-pointer" onClick={() => handleRowClick(mach)}>
-                        <i className="fas fa-gear text-[10px] text-[#00E5FF]" />
-                        <div>
-                          <div>{mach.machineName}</div>
-                          <span className="text-[9px] font-mono text-[#00E5FF]">{mach.machineId}</span>
-                        </div>
-                      </td>
-                      <td className="text-xs font-medium text-white cursor-pointer" onClick={() => handleRowClick(mach)}>
-                        <div>{mach.zone}</div>
-                        <span className="text-[9px] text-[#8899AA]">{mach.stageName || 'Factory Floor'}</span>
-                      </td>
-                      <td className="text-xs cursor-pointer" style={{ color: '#8899AA' }} onClick={() => handleRowClick(mach)}>{mach.operator || 'Unassigned'}</td>
-                      <td>{renderStatus(mach.status, mach.power)}</td>
-                      <td className="text-xs font-bold" style={{ color: mach.temperature >= 1000 ? '#FF4757' : mach.temperature >= 500 ? '#FFB340' : '#00E5FF' }}>
-                        {mach.temperature}°C
-                      </td>
-                      <td className="text-xs font-bold text-white">{mach.workingHours} hrs</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <div className="w-12 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                            <div className="h-full rounded-full" style={{
-                              width: `${Math.min(mach.health || 0, 100)}%`,
-                              background: mach.health >= 85 ? '#00D68F' : mach.health >= 60 ? '#FFB340' : '#FF4757'
-                            }} />
-                          </div>
-                          <span className="text-[10px] font-bold text-white">{mach.health}%</span>
-                        </div>
-                      </td>
-                      <td className="text-xs font-bold text-white">{mach.efficiency || 95}%</td>
-                      <td>
-                        <button
-                          onClick={() => handlePowerToggle(mach.machineId || mach.id, mach.power || (isOff ? 'OFF' : 'ON'))}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase transition-all ${
-                            isOff ? 'bg-[#FF4757] text-white shadow-[0_0_10px_rgba(255,71,87,0.4)]' : 'bg-[#00D68F] text-white shadow-[0_0_10px_rgba(0,214,143,0.4)]'
-                          }`}
-                        >
-                          {mach.power === 'OFF' || isOff ? 'OFF' : 'ON'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center text-xs mt-4">
-          <span style={{ color: '#556677' }}>
-            Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredMachines.length)} of {filteredMachines.length} steel units
-          </span>
-          <div className="flex items-center gap-2">
-            <button 
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              className="chart-toolbar-btn disabled:opacity-40"
-            >
-              <i className="fas fa-chevron-left" />
-            </button>
-            <span className="font-bold text-white px-2">Page {currentPage} of {totalPages}</span>
-            <button 
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              className="chart-toolbar-btn disabled:opacity-40"
-            >
-              <i className="fas fa-chevron-right" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Slide-out Status Drawer */}
+      {/* EDIT DRAWER */}
       <AnimatePresence>
         {isDrawerOpen && (
           <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDrawerOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
-            />
-
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsDrawerOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="fixed right-0 top-0 h-full w-full max-w-md z-[101] flex flex-col p-6 overflow-y-auto"
-              style={{
-                background: 'var(--bg-card)',
-                borderLeft: '1px solid var(--border-color)',
-                boxShadow: 'var(--card-shadow)'
-              }}
+              style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-color)', boxShadow: 'var(--card-shadow)' }}
             >
-              <div className="flex justify-between items-center pb-4 mb-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
-                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>
-                  {selectedMachine ? `Machine Telemetry (${selectedMachine.machineId})` : 'Register Equipment'}
+              <div className="flex justify-between items-center pb-4 mb-6 border-b" style={{ borderColor: 'var(--border-color)' }}>
+                <h3 className="text-section-title" style={{ color: 'var(--text-main)' }}>
+                  {selectedMachine ? `Edit ${selectedMachine.machineId}` : 'Register Equipment'}
                 </h3>
-                <button onClick={() => setIsDrawerOpen(false)} className="text-[#8899AA] hover:text-white">
-                  <i className="fas fa-times text-sm" />
+                <button onClick={() => setIsDrawerOpen(false)} className="btn-icon-saas !w-8 !h-8">
+                  <i className="fas fa-times text-xs" />
                 </button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4 flex-1">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Machine Name</label>
-                  <input 
-                    type="text" 
-                    required 
-                    className="input w-full text-xs" 
-                    value={formState.machineName}
-                    onChange={(e) => setFormState({ ...formState, machineName: e.target.value })}
-                  />
+                  <label className="text-card-label uppercase block mb-1" style={{ color: 'var(--text-secondary)' }}>Machine ID</label>
+                  <input type="text" required className="input-saas text-xs font-mono" value={formState.machineId} onChange={(e) => setFormState({ ...formState, machineId: e.target.value })} />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Zone</label>
-                  <select 
-                    className="filter-select w-full text-xs font-semibold"
-                    value={formState.zone}
-                    onChange={(e) => setFormState({ ...formState, zone: e.target.value })}
-                  >
-                    {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                  <label className="text-card-label uppercase block mb-1" style={{ color: 'var(--text-secondary)' }}>Equipment Name</label>
+                  <input type="text" required className="input-saas text-xs" value={formState.machineName} onChange={(e) => setFormState({ ...formState, machineName: e.target.value })} />
+                </div>
+
+                <div>
+                  <label className="text-card-label uppercase block mb-1" style={{ color: 'var(--text-secondary)' }}>Zone</label>
+                  <select className="input-saas text-xs" value={formState.zone} onChange={(e) => setFormState({ ...formState, zone: e.target.value })}>
+                    {STEEL_ZONES.filter(z => z !== 'All Zones').map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Assigned Operator</label>
-                    <input 
-                      type="text" 
-                      className="input w-full text-xs" 
-                      value={formState.operator}
-                      onChange={(e) => setFormState({ ...formState, operator: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Status</label>
-                    <select 
-                      className="filter-select w-full text-xs font-semibold"
-                      value={formState.status}
-                      onChange={(e) => setFormState({ ...formState, status: e.target.value })}
-                    >
-                      <option value="Running">Running</option>
-                      <option value="Idle">Idle</option>
-                      <option value="Maintenance">Maintenance</option>
-                      <option value="Offline">Offline</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Temperature (°C)</label>
-                    <input 
-                      type="number" 
-                      className="input w-full text-xs" 
-                      value={formState.temperature}
-                      onChange={(e) => setFormState({ ...formState, temperature: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Working Hours</label>
-                    <input 
-                      type="number" 
-                      className="input w-full text-xs" 
-                      value={formState.workingHours}
-                      onChange={(e) => setFormState({ ...formState, workingHours: Number(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Health Index (%)</label>
-                    <input 
-                      type="number" 
-                      className="input w-full text-xs" 
-                      value={formState.health}
-                      onChange={(e) => setFormState({ ...formState, health: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Efficiency (%)</label>
-                    <input 
-                      type="number" 
-                      className="input w-full text-xs" 
-                      value={formState.efficiency}
-                      onChange={(e) => setFormState({ ...formState, efficiency: Number(e.target.value) })}
-                    />
-                  </div>
+                <div>
+                  <label className="text-card-label uppercase block mb-1" style={{ color: 'var(--text-secondary)' }}>Assigned Operator</label>
+                  <input type="text" className="input-saas text-xs" value={formState.assignedOperator} onChange={(e) => setFormState({ ...formState, assignedOperator: e.target.value })} />
                 </div>
 
                 <div className="pt-4 flex gap-3">
-                  <button type="submit" className="btn-primary flex-1 py-2.5 text-xs font-bold uppercase">
-                    Save Changes
-                  </button>
-                  {selectedMachine && (
-                    <button 
-                      type="button" 
-                      onClick={() => handleDelete(selectedMachine.machineId || selectedMachine.id)}
-                      className="btn-danger py-2.5 px-4 text-xs font-bold uppercase"
-                    >
-                      Delete
-                    </button>
-                  )}
+                  <button type="submit" className="btn-primary-saas flex-1">Save Machine Config</button>
                 </div>
               </form>
             </motion.div>
           </>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-// Machine Control Card Subcomponent
-function MachineControlCard({ machine, onRowClick, onPowerToggle, onStatusChange, renderStatus }) {
-  const isOff = machine.power === 'OFF' || machine.status === 'Offline';
-
-  return (
-    <div 
-      className={`glass-card-premium p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
-        isOff ? 'border-[#FF4757]/40 shadow-[0_4px_25px_rgba(255,71,87,0.15)]' : ''
-      }`}
-    >
-      <div>
-        <div className="flex justify-between items-start gap-2 mb-3">
-          <div className="cursor-pointer" onClick={onRowClick}>
-            <span className="text-[9px] font-mono font-bold text-[#00E5FF]">{machine.machineId}</span>
-            <h4 className="text-sm font-bold text-white leading-tight hover:text-[#00E5FF] transition-colors">{machine.machineName}</h4>
-            <span className="text-[10px] text-[#8899AA] block mt-0.5">{machine.stageName || machine.zone}</span>
-          </div>
-          <div>{renderStatus(machine.status, machine.power)}</div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 my-4 text-xs">
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Operator</span>
-            <span className="font-bold text-white truncate block">{machine.operator || 'Unassigned'}</span>
-          </div>
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Temperature</span>
-            <span className="font-bold block" style={{ color: machine.temperature >= 1000 ? '#FF4757' : machine.temperature >= 500 ? '#FFB340' : '#00E5FF' }}>
-              {machine.temperature}°C
-            </span>
-          </div>
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Health</span>
-            <span className="font-bold text-white">{machine.health}%</span>
-          </div>
-          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Hours</span>
-            <span className="font-bold text-white">{machine.workingHours}h</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Control Bar */}
-      <div className="pt-3 border-t border-white/[0.06] space-y-3">
-        {/* Power Switch */}
-        <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: isOff ? 'rgba(255,71,87,0.1)' : 'rgba(0,214,143,0.1)' }}>
-          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-            <i className={`fas fa-power-off text-xs ${isOff ? 'text-[#FF4757]' : 'text-[#00D68F]'}`} /> Power Switch
-          </span>
-          <button
-            onClick={() => onPowerToggle(machine.machineId || machine.id, machine.power || (isOff ? 'OFF' : 'ON'))}
-            className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
-              isOff ? 'bg-[#FF4757] text-white shadow-[0_0_10px_rgba(255,71,87,0.4)]' : 'bg-[#00D68F] text-white shadow-[0_0_10px_rgba(0,214,143,0.4)]'
-            }`}
-          >
-            {machine.power === 'OFF' || isOff ? 'OFF' : 'ON'}
-          </button>
-        </div>
-
-        {/* Action Controls */}
-        <div className="grid grid-cols-4 gap-1">
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
-            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#00D68F] hover:bg-[#00D68F]/20 flex items-center justify-center gap-1"
-          >
-            <i className="fas fa-play text-[8px]" /> Start
-          </button>
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Idle')}
-            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#FFB340] hover:bg-[#FFB340]/20 flex items-center justify-center gap-1"
-          >
-            <i className="fas fa-pause text-[8px]" /> Pause
-          </button>
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Offline')}
-            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#FF4757] hover:bg-[#FF4757]/20 flex items-center justify-center gap-1"
-          >
-            <i className="fas fa-stop text-[8px]" /> Stop
-          </button>
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
-            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#00E5FF] hover:bg-[#00E5FF]/20 flex items-center justify-center gap-1"
-          >
-            <i className="fas fa-rotate text-[8px]" /> Restart
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

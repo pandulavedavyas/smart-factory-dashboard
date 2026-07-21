@@ -1,60 +1,66 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ==========================================
-   THEME DESIGN TOKENS ARCHITECTURE
+   ENTERPRISE SAAS DESIGN SYSTEM TOKENS
    ========================================== */
 
 :root, .theme-dark {
   --bg-main: #081321;
-  --bg-card: #0E1B2D;
+  --bg-secondary: #0E1B2D;
+  --bg-card: #13263E;
   --bg-sidebar: #09172A;
-  --bg-navbar: #0B1930;
+  --bg-navbar: #10243D;
+  
   --primary: #2563EB;
-  --secondary: #06B6D4;
+  --primary-blue: #2563EB;
+  --secondary-blue: #3B82F6;
   --success: #10B981;
   --warning: #F59E0B;
   --danger: #EF4444;
+  
   --text-main: #F8FAFC;
   --text-secondary: #94A3B8;
-  --border-color: rgba(255, 255, 255, 0.06);
-  --glass-bg: rgba(14, 27, 45, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.06);
+  --border-color: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(255, 255, 255, 0.03);
   --hover-bg: rgba(255, 255, 255, 0.04);
   --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --glow-primary: rgba(37, 99, 235, 0.25);
+  --card-radius: 18px;
+  --glow-primary: rgba(37, 99, 235, 0.2);
 }
 
 .theme-light {
-  --bg-main: #F4F7FB;
+  --bg-main: #F5F7FA;
+  --bg-secondary: #FFFFFF;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
   --bg-navbar: #FFFFFF;
+  
   --primary: #2563EB;
-  --secondary: #6B7280;
+  --primary-blue: #2563EB;
+  --secondary-blue: #3B82F6;
   --success: #10B981;
   --warning: #F59E0B;
   --danger: #EF4444;
+  
   --text-main: #111827;
   --text-secondary: #6B7280;
   --border-color: #E5E7EB;
-  --glass-bg: rgba(255, 255, 255, 0.95);
-  --glass-border: #E5E7EB;
   --input-bg: #F9FAFB;
-  --hover-bg: rgba(0, 0, 0, 0.03);
-  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  --glow-primary: rgba(37, 99, 235, 0.15);
+  --hover-bg: #EEF4FF;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --card-radius: 18px;
+  --glow-primary: rgba(37, 99, 235, 0.12);
 }
 
 @layer base {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     background: var(--bg-main);
     color: var(--text-main);
     overflow-x: hidden;
@@ -72,170 +78,109 @@
   ::selection { background: var(--primary); color: #FFFFFF; }
 }
 
-@layer components {
-  .glass {
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+@layer utilities {
+  /* Strict Typography Scale */
+  .text-dashboard-title { font-size: 36px; font-weight: 700; line-height: 1.25; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+  .text-page-title { font-size: 30px; font-weight: 700; line-height: 1.25; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+  .text-section-title { font-size: 22px; font-weight: 600; line-height: 1.3; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+  .text-card-value { font-size: 30px; font-weight: 700; line-height: 1.2; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+  .text-card-label { font-size: 13px; font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; }
+  .text-sidebar-label { font-size: 15px; font-weight: 600; }
+  .text-table-body { font-size: 14px; font-weight: 400; }
+  .text-button { font-size: 14px; font-weight: 600; }
+
+  /* Enterprise Cards */
+  .saas-card {
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 18px;
+    border-radius: var(--card-radius);
+    padding: 24px;
     box-shadow: var(--card-shadow);
+    color: var(--text-main);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   }
-  .glass-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .glass-hover:hover {
-    border-color: var(--primary);
-    box-shadow: var(--card-shadow), 0 0 20px var(--glow-primary);
+  .saas-card:hover {
     transform: translateY(-2px);
-  }
-  .glass-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 18px;
-    box-shadow: var(--card-shadow);
-    color: var(--text-main);
-    transition: background-color 0.3s ease, border-color 0.3s ease;
-  }
-  .glass-card-premium {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 18px;
-    box-shadow: var(--card-shadow);
-    position: relative;
-    overflow: hidden;
-    color: var(--text-main);
-    transition: background-color 0.3s ease, border-color 0.3s ease;
-  }
-  .glass-card-premium::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--primary), var(--secondary), transparent);
+    box-shadow: var(--card-shadow), 0 8px 25px var(--glow-primary);
   }
 
-  .btn-primary {
-    @apply px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-300;
+  /* Enterprise Buttons */
+  .btn-primary-saas {
+    @apply px-5 py-2.5 rounded-xl text-button text-white transition-all duration-300 flex items-center justify-center gap-2;
     background: var(--primary);
     box-shadow: 0 4px 15px var(--glow-primary);
   }
-  .btn-primary:hover {
+  .btn-primary-saas:hover {
     transform: translateY(-1px);
     filter: brightness(1.1);
     box-shadow: 0 8px 25px var(--glow-primary);
   }
-  .btn-primary:active { transform: translateY(0); }
 
-  .btn-secondary {
-    @apply px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300;
+  .btn-secondary-saas {
+    @apply px-5 py-2.5 rounded-xl text-button transition-all duration-300 flex items-center justify-center gap-2;
     background: var(--input-bg);
     color: var(--text-main);
     border: 1px solid var(--border-color);
   }
-  .btn-secondary:hover {
+  .btn-secondary-saas:hover {
     background: var(--hover-bg);
     border-color: var(--primary);
   }
 
-  .btn-danger {
-    @apply px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300;
-    background: rgba(239, 68, 68, 0.12);
-    color: var(--danger);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-  }
-  .btn-danger:hover {
-    background: rgba(239, 68, 68, 0.22);
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
-  }
-
-  .btn-icon {
+  .btn-icon-saas {
     @apply w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300;
     background: var(--input-bg);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
   }
-  .btn-icon:hover {
+  .btn-icon-saas:hover {
     background: var(--hover-bg);
     color: var(--text-main);
     border-color: var(--primary);
   }
 
-  .input {
+  .input-saas {
     @apply w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-300;
     background: var(--input-bg);
     color: var(--text-main);
     border: 1px solid var(--border-color);
   }
-  .input::placeholder { color: var(--text-secondary); }
-  .input:focus {
+  .input-saas::placeholder { color: var(--text-secondary); }
+  .input-saas:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--glow-primary);
     background: var(--bg-card);
   }
 
-  .status-badge {
-    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold capitalize;
-    letter-spacing: 0.025em;
+  /* Enterprise Table */
+  .saas-table-container {
+    @apply overflow-x-auto rounded-2xl border;
+    background: var(--bg-card);
+    border-color: var(--border-color);
   }
-  .status-running {
-    background: rgba(16, 185, 129, 0.15);
-    color: var(--success);
+  .saas-table {
+    @apply w-full text-table-body text-left border-collapse;
   }
-  .status-idle {
-    background: rgba(245, 158, 11, 0.15);
-    color: var(--warning);
-  }
-  .status-down {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--danger);
-  }
-  .status-in_progress {
-    background: rgba(37, 99, 235, 0.15);
-    color: var(--primary);
-  }
-
-  .table-container { @apply overflow-x-auto; }
-  .table-container table { @apply w-full text-sm; }
-  .table-container th {
-    @apply text-left font-semibold text-xs uppercase tracking-wider py-3.5 px-4;
+  .saas-table th {
+    @apply py-4 px-5 font-semibold text-xs uppercase tracking-wider sticky top-0 z-10;
     color: var(--text-secondary);
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
   }
-  .table-container td {
-    @apply py-3.5 px-4;
-    border-bottom: 1px solid var(--border-color);
+  .saas-table td {
+    @apply py-4 px-5 border-b transition-colors duration-150;
+    border-color: var(--border-color);
     color: var(--text-main);
   }
-  .table-container tbody tr {
-    @apply transition-all duration-200;
-  }
-  .table-container tbody tr:hover {
+  .saas-table tbody tr:hover {
     background: var(--hover-bg);
   }
 
-  .filter-select {
-    @apply px-3 py-2 rounded-xl text-xs font-medium outline-none transition-all duration-300 cursor-pointer;
-    background: var(--input-bg);
-    color: var(--text-main);
-    border: 1px solid var(--border-color);
+  /* Status Badges */
+  .saas-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider;
   }
-  .filter-select:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px var(--glow-primary);
-  }
-
-  .chart-toolbar-btn {
-    @apply w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200;
-    background: var(--input-bg);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-  }
-  .chart-toolbar-btn:hover {
-    background: var(--hover-bg);
-    color: var(--text-main);
-    border-color: var(--primary);
-  }
+  .saas-badge-running { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+  .saas-badge-idle { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+  .saas-badge-down { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
 }

@@ -1,340 +1,239 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeCollection, toggleMachinePower, updateMachineStatus } from '../services/firestoreService';
-import { SEED_MANUFACTURING_STAGES } from '../services/steelDataSeed';
-import { useToast } from '../context/ToastContext';
+
+const STEEL_PIPELINE_STAGES = [
+  {
+    stageNum: 1,
+    name: 'Raw Material Intake',
+    icon: 'fa-truck-ramp-box',
+    machine: 'Intake Conveyor IC-01',
+    temp: '28°C',
+    status: 'Running',
+    operator: 'James Wilson',
+    progress: 100,
+    desc: 'Iron ore pellets, metallurgical coke, and flux material feeding system.',
+    details: { feedRate: '450 Tons/Hr', moisture: '2.4%', bufferLevel: '88%' }
+  },
+  {
+    stageNum: 2,
+    name: 'Blast Furnace',
+    icon: 'fa-fire-burner',
+    machine: 'Blast Furnace BF-A',
+    temp: '1450°C',
+    status: 'Running',
+    operator: 'Michael Brown',
+    progress: 94,
+    desc: 'Iron reduction smelting producing molten liquid pig iron.',
+    details: { blastPressure: '3.2 Bar', slagRatio: '280 kg/t', tapSpeed: '4.2 t/min' }
+  },
+  {
+    stageNum: 3,
+    name: 'Steel Making (BOF)',
+    icon: 'fa-flask-vial',
+    machine: 'Basic Oxygen Converter C2',
+    temp: '1620°C',
+    status: 'Running',
+    operator: 'Sarah Chen',
+    progress: 88,
+    desc: 'Decarburization via pure oxygen blowing to convert pig iron to liquid steel.',
+    details: { oxygenPurity: '99.8%', carbonPct: '0.04%', blowDuration: '18 Mins' }
+  },
+  {
+    stageNum: 4,
+    name: 'Continuous Casting',
+    icon: 'fa-bars-staggered',
+    machine: 'Slab Caster SC-01',
+    temp: '1100°C',
+    status: 'Running',
+    operator: 'Emily Davis',
+    progress: 92,
+    desc: 'Solidification of liquid steel into continuous rectangular slabs.',
+    details: { castingSpeed: '1.4 m/min', slabWidth: '1500 mm', moldVibration: '140 Hz' }
+  },
+  {
+    stageNum: 5,
+    name: 'Hot Rolling Mill',
+    icon: 'fa-gears',
+    machine: 'Hot Strip Mill HSM-A1',
+    temp: '900°C',
+    status: 'Running',
+    operator: 'David Martinez',
+    progress: 96,
+    desc: 'Thermal reduction rolling slabs down to precision steel sheet coils.',
+    details: { coilThickness: '2.5 mm', rollingForce: '3200 Tons', stripSpeed: '18 m/s' }
+  },
+  {
+    stageNum: 6,
+    name: 'Quality Inspection',
+    icon: 'fa-[#10B981] fa-[#2563EB] fa-microscope',
+    machine: 'NDT Scanner QA-02',
+    temp: '45°C',
+    status: 'Running',
+    operator: 'Lisa Anderson',
+    progress: 100,
+    desc: 'Ultrasonic flaw detection, X-ray thickness profiling, and tensile testing.',
+    details: { defectRate: '0.02%', tensileStrength: '520 MPa', passRate: '99.8%' }
+  },
+  {
+    stageNum: 7,
+    name: 'Coil Packaging & Dispatch',
+    icon: 'fa-boxes-packing',
+    machine: 'Strapping Line PKG-01',
+    temp: '32°C',
+    status: 'Running',
+    operator: 'Robert Taylor',
+    progress: 90,
+    desc: 'Automated steel coil wrapping, barcode labeling, and logistics staging.',
+    details: { coilsStaged: '140 Units', avgWeight: '22 Tons', dispatchStatus: 'Ready' }
+  }
+];
 
 export default function ManufacturingWorkflow() {
-  const [stages, setStages] = useState(SEED_MANUFACTURING_STAGES);
-  const [machines, setMachines] = useState([]);
-  const [selectedStageId, setSelectedStageId] = useState('stage-1');
-  const [loading, setLoading] = useState(true);
-  const { showToast } = useToast();
-
-  useEffect(() => {
-    let unSubStages = subscribeCollection('manufacturingStages', (data) => {
-      if (data && data.length > 0) {
-        setStages(data.sort((a,b) => a.stageNumber - b.stageNumber));
-      }
-    });
-
-    let unSubMachines = subscribeCollection('machines', (data) => {
-      setMachines(data);
-      setLoading(false);
-    });
-
-    return () => {
-      unSubStages();
-      unSubMachines();
-    };
-  }, []);
-
-  const activeStage = stages.find(s => s.id === selectedStageId) || stages[0];
-  const stageMachines = machines.filter(m => m.stageId === selectedStageId || (m.stageName && m.stageName.includes(`Stage ${activeStage?.stageNumber}`)));
-
-  const handlePowerToggle = async (machineId, currentPower) => {
-    const nextPower = currentPower === 'ON' ? 'OFF' : 'ON';
-    try {
-      await toggleMachinePower(machineId, nextPower);
-      showToast(nextPower === 'OFF' ? `Machine ${machineId} powered OFF. Stage alerted!` : `Machine ${machineId} powered ON. Stage resumed!`, nextPower === 'OFF' ? 'error' : 'success');
-    } catch (err) {
-      showToast('Failed to update machine power state', 'error');
-    }
-  };
-
-  const handleStatusChange = async (machineId, newStatus) => {
-    try {
-      await updateMachineStatus(machineId, newStatus);
-      showToast(`Machine ${machineId} status changed to ${newStatus}`);
-    } catch (err) {
-      showToast('Failed to update machine status', 'error');
-    }
-  };
-
-  const renderStatusBadge = (status, power) => {
-    if (power === 'OFF' || status === 'Offline') {
-      return <span className="status-badge status-down">🔴 OFF / Offline</span>;
-    }
-    switch (status) {
-      case 'Running':
-        return <span className="status-badge status-running">🟢 Running</span>;
-      case 'Idle':
-        return <span className="status-badge status-idle">🟡 Idle</span>;
-      case 'Maintenance':
-        return <span className="status-badge status-warning">🟠 Maintenance</span>;
-      default:
-        return <span className="status-badge status-down">⚪ Offline</span>;
-    }
-  };
+  const [selectedStage, setSelectedStage] = useState(STEEL_PIPELINE_STAGES[1]);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex justify-between items-center flex-wrap gap-4">
+    <div className="space-y-8">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#0066FF]/10 text-[#00E5FF] border border-[#0066FF]/20 mb-1">
-            <i className="fas fa-[#00E5FF] text-[8px] animate-pulse" /> Industry 4.0 Digital Twin
-          </div>
-          <h1 className="text-xl font-bold text-white tracking-tight uppercase">End-to-End Steel Manufacturing Workflow</h1>
-          <p className="text-xs" style={{ color: '#8899AA' }}>Real-time telemetry and equipment state simulation across all 12 steel plant stages.</p>
+          <h1 className="text-dashboard-title" style={{ color: 'var(--text-main)' }}>Steel Manufacturing Workflow</h1>
+          <p className="text-card-label" style={{ color: 'var(--text-secondary)' }}>End-to-end 7-stage steel production pipeline from raw ore intake to finished coil dispatch.</p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/[0.04] text-xs font-semibold text-white" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="w-2.5 h-2.5 rounded-full bg-[#00D68F] animate-pulse" />
-            <span>Material Flow: Active</span>
-          </div>
+        <div className="flex items-center gap-2 px-4 py-2 rounded-xl border" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+          <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: 'var(--success)' }} />
+          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>7 Stages Synchronized</span>
         </div>
-      </div>
+      </motion.div>
 
-      {/* 12-Stage Horizontal Interactive Digital Twin Timeline */}
-      <div className="glass-card-premium p-4 relative overflow-x-auto">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-white mb-3 flex items-center justify-between">
-          <span>Digital Twin Stage Pipeline</span>
-          <span className="text-[10px] font-normal" style={{ color: '#556677' }}>Click stage to view machines & live metrics</span>
-        </h3>
-
-        <div className="flex items-center gap-3 min-w-[1100px] py-3 px-1 relative">
-          {stages.map((st, idx) => {
-            const isSelected = st.id === selectedStageId;
-            const isLast = idx === stages.length - 1;
-            const stageMachs = machines.filter(m => m.stageId === st.id || (m.stageName && m.stageName.includes(`Stage ${st.stageNumber}`)));
-            const hasOffline = stageMachs.some(m => m.power === 'OFF' || m.status === 'Offline');
-            const hasMaint = stageMachs.some(m => m.status === 'Maintenance');
-
-            const stateColor = hasOffline ? '#FF4757' : hasMaint ? '#FFB340' : '#00D68F';
-
+      {/* HORIZONTAL 7-STAGE PIPELINE */}
+      <div className="saas-card overflow-x-auto py-8">
+        <div className="flex items-center justify-between min-w-[1100px] relative px-4">
+          {/* Connector Line */}
+          <div className="absolute top-1/2 left-12 right-12 h-1 -translate-y-1/2 z-0" style={{ background: 'var(--border-color)' }} />
+          
+          {STEEL_PIPELINE_STAGES.map((stage) => {
+            const isSelected = selectedStage.stageNum === stage.stageNum;
             return (
-              <div key={st.id} className="flex items-center gap-3 flex-shrink-0">
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedStageId(st.id)}
-                  className={`p-3 rounded-xl flex flex-col justify-between w-44 h-28 text-left transition-all duration-300 relative border cursor-pointer ${
-                    isSelected ? 'shadow-[0_4px_25px_rgba(0,102,255,0.3)]' : ''
+              <div
+                key={stage.stageNum}
+                onClick={() => setSelectedStage(stage)}
+                className="relative z-10 flex flex-col items-center cursor-pointer group"
+              >
+                {/* Node Badge */}
+                <div
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg transition-all duration-300 shadow-md ${
+                    isSelected ? 'scale-110 ring-4' : 'hover:scale-105'
                   }`}
                   style={{
-                    background: isSelected 
-                      ? 'linear-gradient(135deg, rgba(0,102,255,0.22), rgba(0,229,255,0.08))' 
-                      : 'rgba(255,255,255,0.02)',
-                    borderColor: isSelected ? '#00E5FF' : 'rgba(255,255,255,0.06)'
+                    background: isSelected ? 'var(--primary)' : 'var(--input-bg)',
+                    color: isSelected ? '#FFFFFF' : 'var(--text-main)',
+                    borderColor: isSelected ? 'var(--primary)' : 'var(--border-color)',
+                    borderWidth: '1px',
+                    ringColor: 'var(--glow-primary)'
                   }}
                 >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest" style={{ color: isSelected ? '#00E5FF' : '#556677' }}>
-                      ST-{st.stageNumber}
-                    </span>
-                    <span className="w-2 h-2 rounded-full" style={{ background: stateColor, boxShadow: `0 0 8px ${stateColor}` }} />
-                  </div>
+                  <i className={`fas ${stage.icon}`} />
+                </div>
 
-                  <div>
-                    <h4 className="text-xs font-bold text-white leading-snug line-clamp-2">{st.name.replace(/Stage \d+ – /, '')}</h4>
-                    <span className="text-[9px]" style={{ color: '#8899AA' }}>{stageMachs.length} Units Connected</span>
-                  </div>
-                </motion.button>
+                {/* Stage Title */}
+                <span className="text-xs font-bold mt-3 text-center max-w-[110px] leading-snug" style={{ color: isSelected ? 'var(--primary-blue)' : 'var(--text-main)' }}>
+                  {stage.name}
+                </span>
+                <span className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  Stage 0{stage.stageNum}
+                </span>
 
-                {!isLast && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-0.5" style={{ background: 'linear-gradient(90deg, #0066FF, #00E5FF)' }} />
-                    <i className="fas fa-chevron-right text-[10px] text-[#00E5FF] animate-pulse" />
-                  </div>
-                )}
+                {/* Status Indicator Pill */}
+                <div className="mt-2 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border"
+                  style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--success)' }} />
+                  <span>{stage.temp}</span>
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Selected Stage Detail Panel */}
-      {activeStage && (
-        <motion.div 
-          key={activeStage.id}
-          initial={{ opacity: 0, y: 10 }}
+      {/* SELECTED STAGE DETAILED TELEMETRY CARD */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={selectedStage.stageNum}
+          initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.25 }}
+          className="saas-card space-y-6"
         >
-          {/* Stage Overview Banner */}
-          <div className="glass-card-premium p-6 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #0066FF, #0052CC)' }}>
-                  <i className="fas fa-industry text-base" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white tracking-tight uppercase">{activeStage.name}</h2>
-                  <p className="text-xs" style={{ color: '#8899AA' }}>{activeStage.description}</p>
-                </div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6" style={{ borderColor: 'var(--border-color)' }}>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-md" style={{ background: 'var(--primary-blue)', color: '#FFFFFF' }}>
+                  Stage 0{selectedStage.stageNum}
+                </span>
+                <h2 className="text-section-title" style={{ color: 'var(--text-main)' }}>{selectedStage.name}</h2>
               </div>
+              <p className="text-card-label mt-1" style={{ color: 'var(--text-secondary)' }}>{selectedStage.desc}</p>
             </div>
-
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="px-4 py-2 rounded-xl border border-white/[0.06]" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Zone Allocation</span>
-                <span className="text-xs font-bold text-white">{activeStage.zone}</span>
+            
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl border flex items-center gap-3" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+                <i className="fas fa-temperature-high text-lg" style={{ color: 'var(--warning)' }} />
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: 'var(--text-secondary)' }}>Thermal Point</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{selectedStage.temp}</span>
+                </div>
               </div>
-              <div className="px-4 py-2 rounded-xl border border-white/[0.06]" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Active Machines</span>
-                <span className="text-xs font-bold text-[#00E5FF]">{stageMachines.filter(m => m.power !== 'OFF' && m.status === 'Running').length} / {stageMachines.length} Units</span>
+
+              <div className="p-3 rounded-xl border flex items-center gap-3" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+                <i className="fas fa-user-gear text-lg" style={{ color: 'var(--primary-blue)' }} />
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: 'var(--text-secondary)' }}>Station Operator</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>{selectedStage.operator}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Machine Grid in Selected Stage */}
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-widest text-white mb-4 flex items-center gap-2">
-              <i className="fas fa-gears text-[#00E5FF]" />
-              <span>Stage Machinery & Interactive Telemetry ({stageMachines.length})</span>
-            </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-4 rounded-2xl border space-y-2" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Primary Machine Node</span>
+              <div className="text-base font-bold" style={{ color: 'var(--text-main)' }}>{selectedStage.machine}</div>
+            </div>
 
-            {stageMachines.length === 0 ? (
-              <div className="glass-card-premium p-12 text-center">
-                <i className="fas fa-microchip text-3xl mb-3 text-[#FFB340]" />
-                <p className="text-sm font-bold text-white uppercase">No Equipment Registered in {activeStage.name}</p>
-                <p className="text-xs text-[#8899AA] mt-1">Use the "Seed Demo Data" button in Topbar to populate 35+ steel machines.</p>
+            <div className="p-4 rounded-2xl border space-y-2" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Pipeline Throughput Progress</span>
+              <div className="flex items-center justify-between">
+                <span className="text-base font-bold" style={{ color: 'var(--success)' }}>{selectedStage.progress}%</span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Nominal</span>
               </div>
-            ) : (
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {stageMachines.map((mach) => (
-                  <MachineCard 
-                    key={mach.machineId || mach.id}
-                    machine={mach}
-                    onPowerToggle={handlePowerToggle}
-                    onStatusChange={handleStatusChange}
-                    renderStatusBadge={renderStatusBadge}
-                  />
-                ))}
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'var(--border-color)' }}>
+                <div className="h-full rounded-full" style={{ width: `${selectedStage.progress}%`, background: 'var(--success)' }} />
               </div>
-            )}
+            </div>
+
+            <div className="p-4 rounded-2xl border space-y-2" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Operational Status</span>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: 'var(--success)' }} />
+                <span className="text-base font-bold" style={{ color: 'var(--text-main)' }}>{selectedStage.status}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
+            <h4 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-secondary)' }}>Stage Technical Parameters</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {Object.entries(selectedStage.details).map(([key, val]) => (
+                <div key={key} className="p-3 rounded-xl border flex justify-between items-center" style={{ background: 'var(--input-bg)', borderColor: 'var(--border-color)' }}>
+                  <span className="text-xs font-semibold capitalize" style={{ color: 'var(--text-secondary)' }}>{key.replace(/([A-Z])/g, ' $1')}</span>
+                  <span className="text-xs font-bold" style={{ color: 'var(--text-main)' }}>{val}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </motion.div>
-      )}
-    </div>
-  );
-}
-
-// Machine Card Component with Power Toggle & Action Controls
-function MachineCard({ machine, onPowerToggle, onStatusChange, renderStatusBadge }) {
-  const isOff = machine.power === 'OFF' || machine.status === 'Offline';
-  const isMaint = machine.status === 'Maintenance';
-  const isRunning = machine.status === 'Running' && !isOff;
-
-  return (
-    <div 
-      className={`glass-card-premium p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
-        isOff ? 'border-[#FF4757]/40 shadow-[0_4px_25px_rgba(255,71,87,0.15)]' : ''
-      }`}
-    >
-      {/* Top Header */}
-      <div>
-        <div className="flex justify-between items-start gap-3 mb-3">
-          <div>
-            <span className="text-[9px] font-mono font-bold text-[#00E5FF]">{machine.machineId}</span>
-            <h4 className="text-sm font-bold text-white leading-tight">{machine.machineName}</h4>
-            <p className="text-[10px] text-[#8899AA] line-clamp-1 mt-0.5">{machine.role}</p>
-          </div>
-          <div>{renderStatusBadge(machine.status, machine.power)}</div>
-        </div>
-
-        {/* Essential Telemetry Grid */}
-        <div className="grid grid-cols-2 gap-2 my-4 text-xs">
-          <div className="p-2.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Operator</span>
-            <span className="font-bold text-white truncate block">{machine.operator || 'Unassigned'}</span>
-          </div>
-
-          <div className="p-2.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Temperature</span>
-            <span className="font-bold block" style={{ color: machine.temperature >= 1000 ? '#FF4757' : machine.temperature >= 500 ? '#FFB340' : '#00E5FF' }}>
-              {machine.temperature}°C
-            </span>
-          </div>
-
-          <div className="p-2.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Health Index</span>
-            <span className="font-bold text-white">{machine.health}%</span>
-          </div>
-
-          <div className="p-2.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Working Hours</span>
-            <span className="font-bold text-white">{machine.workingHours} hrs</span>
-          </div>
-
-          {/* Stage-Specific Metric preview if exists */}
-          {machine.pressure && (
-            <div className="p-2.5 rounded-lg col-span-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Pressure</span>
-              <span className="font-bold text-[#00E5FF]">{machine.pressure}</span>
-            </div>
-          )}
-          {machine.castingSpeed && (
-            <div className="p-2.5 rounded-lg col-span-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Casting Speed</span>
-              <span className="font-bold text-[#00E5FF]">{machine.castingSpeed}</span>
-            </div>
-          )}
-          {machine.rollingForce && (
-            <div className="p-2.5 rounded-lg col-span-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Rolling Force</span>
-              <span className="font-bold text-[#00E5FF]">{machine.rollingForce}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Manual Control Action Bar */}
-      <div className="pt-3 border-t border-white/[0.06] space-y-3">
-        {/* Power Switch Toggle */}
-        <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: isOff ? 'rgba(255,71,87,0.1)' : 'rgba(0,214,143,0.1)' }}>
-          <div className="flex items-center gap-2">
-            <i className={`fas fa-power-off text-xs ${isOff ? 'text-[#FF4757]' : 'text-[#00D68F]'}`} />
-            <span className="text-xs font-bold text-white">Power Switch</span>
-          </div>
-
-          <button
-            onClick={() => onPowerToggle(machine.machineId || machine.id, machine.power || (isOff ? 'OFF' : 'ON'))}
-            className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 cursor-pointer ${
-              isOff ? 'bg-[#FF4757] text-white shadow-[0_0_12px_rgba(255,71,87,0.5)]' : 'bg-[#00D68F] text-white shadow-[0_0_12px_rgba(0,214,143,0.5)]'
-            }`}
-          >
-            {machine.power === 'OFF' || isOff ? 'OFF' : 'ON'}
-          </button>
-        </div>
-
-        {/* Action Controls (Start, Pause, Stop, Restart) */}
-        <div className="grid grid-cols-4 gap-1.5">
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
-            title="Start Machine"
-            className="py-1.5 rounded-lg text-[10px] font-bold uppercase bg-white/[0.04] text-[#00D68F] hover:bg-[#00D68F]/20 flex items-center justify-center gap-1 transition-all"
-          >
-            <i className="fas fa-play text-[9px]" /> Start
-          </button>
-
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Idle')}
-            title="Pause Machine"
-            className="py-1.5 rounded-lg text-[10px] font-bold uppercase bg-white/[0.04] text-[#FFB340] hover:bg-[#FFB340]/20 flex items-center justify-center gap-1 transition-all"
-          >
-            <i className="fas fa-pause text-[9px]" /> Pause
-          </button>
-
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Offline')}
-            title="Stop Machine"
-            className="py-1.5 rounded-lg text-[10px] font-bold uppercase bg-white/[0.04] text-[#FF4757] hover:bg-[#FF4757]/20 flex items-center justify-center gap-1 transition-all"
-          >
-            <i className="fas fa-stop text-[9px]" /> Stop
-          </button>
-
-          <button
-            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
-            title="Restart Machine"
-            className="py-1.5 rounded-lg text-[10px] font-bold uppercase bg-white/[0.04] text-[#00E5FF] hover:bg-[#00E5FF]/20 flex items-center justify-center gap-1 transition-all"
-          >
-            <i className="fas fa-rotate text-[9px]" /> Restart
-          </button>
-        </div>
-      </div>
+      </AnimatePresence>
     </div>
   );
 }
