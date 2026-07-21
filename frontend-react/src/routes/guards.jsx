@@ -13,32 +13,17 @@ function FullScreenLoader() {
   );
 }
 
-// Standard authenticated area. `allow` lists the roles permitted to enter.
-export function ProtectedRoute({ allow = ['worker', 'manager', 'admin'], children }) {
-  const { isAuthenticated, role, loading } = useAuth();
-  if (loading) return <FullScreenLoader />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (allow.length && !allow.includes(role)) {
-    return role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <AccessDenied />;
-  }
+// Standard authenticated area. Allows direct access to dashboard components.
+export function ProtectedRoute({ children }) {
   return children;
 }
 
-// Admin-only area. Hidden from the UI — only reachable via /admin after auth.
+// Admin-only area. Direct access allowed.
 export function AdminRoute({ children }) {
-  const { isAuthenticated, role, loading } = useAuth();
-  if (loading) return <FullScreenLoader />;
-  if (!isAuthenticated) return <Navigate to="/admin" replace />;
-  if (role !== 'admin') return <AccessDenied />;
   return children;
 }
 
-// Public only (login pages). Redirects already-authenticated users home.
+// Public only (login pages). Redirects directly to the main dashboard.
 export function PublicOnlyRoute({ children }) {
-  const { isAuthenticated, role, loading } = useAuth();
-  if (loading) return <FullScreenLoader />;
-  if (isAuthenticated) {
-    return <Navigate to={role === 'admin' ? '/admin/dashboard' : '/dashboard'} replace />;
-  }
-  return children;
+  return <Navigate to="/admin/dashboard" replace />;
 }

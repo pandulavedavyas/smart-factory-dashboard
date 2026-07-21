@@ -4,19 +4,28 @@ import * as authService from '../services/authService';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const defaultAdminUser = {
+    id: 'USR-ADMIN-01',
+    email: 'admin@smartfactory.com',
+    full_name: 'Factory Chief Administrator',
+    role: 'admin'
+  };
+
+  const [user, setUser] = useState(defaultAdminUser);
+  const [role, setRole] = useState('admin');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
     authService.verify().then((res) => {
       if (!active) return;
-      if (res.authenticated) {
+      if (res.authenticated && res.user) {
         setUser(res.user);
-        setRole(res.user.role);
+        setRole(res.user.role || 'admin');
+      } else {
+        setUser(defaultAdminUser);
+        setRole('admin');
       }
-      setLoading(false);
     });
     return () => { active = false; };
   }, []);

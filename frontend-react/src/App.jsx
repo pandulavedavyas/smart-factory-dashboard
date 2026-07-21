@@ -50,7 +50,7 @@ const PAGE_MAP = {
 
 const ROLE_PERMISSIONS = {
   admin: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'users', 'settings', 'notifications'],
-  worker: ['dashboard', 'workflow', 'ai-assistant', 'notifications']
+  worker: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'users', 'settings', 'notifications']
 };
 
 function DashboardRouter({ base = '/dashboard', mode }) {
@@ -94,22 +94,21 @@ export default function App() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        {/* Landing Page */}
-        <Route path="/" element={<Landing />} />
+        {/* Direct Access Routes (Login Bypass) */}
+        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/login" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 
-        {/* Worker Portal Login & Protected Routes */}
-        <Route path="/login" element={<PublicOnlyRoute><WorkerLogin /></PublicOnlyRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute allow={['worker']}><DashboardRouter base="/dashboard" mode="worker" /></ProtectedRoute>} />
-        <Route path="/dashboard/:page" element={<ProtectedRoute allow={['worker']}><DashboardRouter base="/dashboard" mode="worker" /></ProtectedRoute>} />
+        {/* Worker Portal Dashboard */}
+        <Route path="/dashboard" element={<DashboardRouter base="/dashboard" mode="worker" />} />
+        <Route path="/dashboard/:page" element={<DashboardRouter base="/dashboard" mode="worker" />} />
 
-        {/* Admin Console Hidden Login & Protected Routes */}
-        <Route path="/admin" element={<PublicOnlyRoute><AdminLogin /></PublicOnlyRoute>} />
-        <Route path="/admin/dashboard" element={<ProtectedRoute allow={['admin']}><DashboardRouter base="/admin/dashboard" mode="admin" /></ProtectedRoute>} />
-        <Route path="/admin/dashboard/:page" element={<ProtectedRoute allow={['admin']}><DashboardRouter base="/admin/dashboard" mode="admin" /></ProtectedRoute>} />
+        {/* Admin Console Dashboard */}
+        <Route path="/admin/dashboard" element={<DashboardRouter base="/admin/dashboard" mode="admin" />} />
+        <Route path="/admin/dashboard/:page" element={<DashboardRouter base="/admin/dashboard" mode="admin" />} />
 
-        {/* Denied & Wildcards */}
-        <Route path="/access-denied" element={<AccessDenied />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Wildcard Fallback */}
+        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Routes>
     </Suspense>
   );
