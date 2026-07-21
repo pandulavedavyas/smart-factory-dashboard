@@ -1,21 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getWorkers, saveWorker, deleteWorker } from '../services/firestoreService';
+import { subscribeCollection, saveWorker, deleteWorker } from '../services/firestoreService';
+import { STEEL_DEPARTMENTS, STEEL_ZONES, STEEL_SHIFTS, STEEL_DESIGNATIONS } from '../services/steelDataSeed';
 import { useToast } from '../context/ToastContext';
 
 export default function Workers() {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Search & Filters state
   const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('All');
   const [zoneFilter, setZoneFilter] = useState('All');
   const [shiftFilter, setShiftFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(6);
 
-  // Drawer states
+  // Sorting state
+  const [sortField, setSortField] = useState('employeeId');
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -23,52 +31,79 @@ export default function Workers() {
     employeeId: '',
     name: '',
     email: '',
-    password: 'worker123',
-    department: '',
-    zone: 'Assembly',
+    password: 'worker@123',
+    department: STEEL_DEPARTMENTS[0],
+    designation: STEEL_DESIGNATIONS[0],
+    zone: STEEL_ZONES[0],
     assignedMachine: 'None',
     shift: 'Morning',
     status: 'Active',
-    attendance: 95.0,
+    attendance: 96.5,
     workingHours: 8,
-    performance: 85,
+    experience: 5,
+    phone: '',
     role: 'worker'
   });
 
   const { showToast } = useToast();
 
   useEffect(() => {
-    loadWorkersData();
+    // Real-time Firestore subscription to 'workers' collection
+    const unsubscribe = subscribeCollection('workers', (data) => {
+      setWorkers(data);
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  async function loadWorkersData() {
-    try {
-      setLoading(true);
-      const data = await getWorkers();
-      setWorkers(data);
-    } catch (err) {
-      showToast('Error syncing worker data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Filter & Search Logic
+  const filteredWorkers = useMemo(() => {
+    return workers.filter((w) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        (w.name || '').toLowerCase().includes(q) ||
+        (w.employeeId || '').toLowerCase().includes(q) ||
+        (w.department || '').toLowerCase().includes(q) ||
+        (w.assignedMachine || '').toLowerCase().includes(q);
 
-  // Filter & Search logic
-  const filteredWorkers = workers.filter(w => {
-    const matchesSearch = w.name?.toLowerCase().includes(search.toLowerCase()) || 
-                          w.employeeId?.toLowerCase().includes(search.toLowerCase()) ||
-                          w.department?.toLowerCase().includes(search.toLowerCase());
-    const matchesZone = zoneFilter === 'All' || w.zone === zoneFilter;
-    const matchesShift = shiftFilter === 'All' || w.shift === shiftFilter;
-    const matchesStatus = statusFilter === 'All' || w.status === statusFilter;
-    return matchesSearch && matchesZone && matchesShift && matchesStatus;
-  });
+      const matchesDept = deptFilter === 'All' || w.department === deptFilter;
+      const matchesZone = zoneFilter === 'All' || w.zone === zoneFilter;
+      const matchesShift = shiftFilter === 'All' || w.shift === shiftFilter;
+      const matchesStatus = statusFilter === 'All' || w.status === statusFilter;
 
-  // Pagination calculation
+      return matchesSearch && matchesDept && matchesZone && matchesShift && matchesStatus;
+    });
+  }, [workers, search, deptFilter, zoneFilter, shiftFilter, statusFilter]);
+
+  // Sorting Logic
+  const sortedWorkers = useMemo(() => {
+    return [...filteredWorkers].sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredWorkers, sortField, sortDirection]);
+
+  // Pagination Logic
   const indexOfLastRow = currentPage * rowsPerPage;
   const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentRows = filteredWorkers.slice(indexOfFirstRow, indexOfLastRow);
-  const totalPages = Math.ceil(filteredWorkers.length / rowsPerPage);
+  const currentRows = sortedWorkers.slice(indexOfFirstRow, indexOfLastRow);
+  const totalPages = Math.max(1, Math.ceil(sortedWorkers.length / rowsPerPage));
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const handleRowClick = (worker) => {
     setSelectedWorker(worker);
@@ -79,19 +114,22 @@ export default function Workers() {
 
   const handleCreateNewClick = () => {
     setSelectedWorker(null);
+    const nextIdNum = 1001 + workers.length;
     setFormState({
-      employeeId: 'W-00' + (workers.length + 1),
+      employeeId: `EMP${nextIdNum}`,
       name: '',
       email: '',
-      password: 'worker123',
-      department: '',
-      zone: 'Assembly',
+      password: 'worker@123',
+      department: STEEL_DEPARTMENTS[0],
+      designation: STEEL_DESIGNATIONS[0],
+      zone: STEEL_ZONES[0],
       assignedMachine: 'None',
       shift: 'Morning',
-      status: 'Offline',
-      attendance: 95.0,
-      workingHours: 0,
-      performance: 85,
+      status: 'Active',
+      attendance: 98.0,
+      workingHours: 8,
+      experience: 4,
+      phone: '+1 (555) 000-0000',
       role: 'worker'
     });
     setIsEditing(true);
@@ -102,9 +140,8 @@ export default function Workers() {
     if (window.confirm(`Are you sure you want to remove worker ${empId}?`)) {
       try {
         await deleteWorker(empId);
-        showToast('Worker profile removed successfully');
+        showToast(`Worker ${empId} removed successfully`);
         setIsDrawerOpen(false);
-        loadWorkersData();
       } catch (err) {
         showToast('Failed to delete worker', 'error');
       }
@@ -114,19 +151,16 @@ export default function Workers() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Auto email generation if not provided
-      const emailVal = formState.email || `${formState.employeeId.toLowerCase()}@factory.com`;
+      const emailVal = formState.email || `${formState.employeeId.toLowerCase()}@smartfactory.com`;
       const updateData = { ...formState, email: emailVal };
       await saveWorker(updateData);
-      showToast(selectedWorker ? 'Worker profile updated' : 'Worker registered successfully');
+      showToast(selectedWorker ? 'Worker profile updated' : 'New worker registered in Firestore');
       setIsDrawerOpen(false);
-      loadWorkersData();
     } catch (err) {
       showToast('Error saving worker profile', 'error');
     }
   };
 
-  // Status badges formatter
   const renderStatus = (status) => {
     switch (status) {
       case 'Active':
@@ -144,8 +178,8 @@ export default function Workers() {
       {/* Title */}
       <div className="flex justify-between items-center flex-wrap gap-4">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-xl font-bold text-white tracking-tight uppercase">Workforce Registry</h1>
-          <p className="text-xs" style={{ color: '#8899AA' }}>Manage operator shift details, status, and plant zones.</p>
+          <h1 className="text-xl font-bold text-white tracking-tight uppercase">Steel Plant Workforce Directory</h1>
+          <p className="text-xs" style={{ color: '#8899AA' }}>Real-time Firestore table of 50 plant workers, assignments, and shifts.</p>
         </motion.div>
         <button 
           onClick={handleCreateNewClick}
@@ -156,15 +190,15 @@ export default function Workers() {
         </button>
       </div>
 
-      {/* Filters Toolbar */}
-      <div className="glass-card-premium p-4 flex flex-col md:flex-row md:items-center gap-4 justify-between">
+      {/* Search & Multi-Filter Toolbar */}
+      <div className="glass-card-premium p-4 flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
           <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#556677' }} />
           <input 
             type="text" 
             className="input !pl-10 !py-2.5 w-full text-xs"
-            placeholder="Search by Employee ID, Name, or Department..."
+            placeholder="Search by Employee ID, Name, Department, Machine..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
           />
@@ -173,6 +207,18 @@ export default function Workers() {
         {/* Dropdown Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-col gap-1">
+            <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Department</span>
+            <select 
+              className="filter-select text-xs font-semibold"
+              value={deptFilter}
+              onChange={(e) => { setDeptFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="All">All Departments</option>
+              {STEEL_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
             <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Zone</span>
             <select 
               className="filter-select text-xs font-semibold"
@@ -180,12 +226,7 @@ export default function Workers() {
               onChange={(e) => { setZoneFilter(e.target.value); setCurrentPage(1); }}
             >
               <option value="All">All Zones</option>
-              <option value="Assembly">Assembly</option>
-              <option value="Packaging">Packaging</option>
-              <option value="Quality Control">Quality Control</option>
-              <option value="Warehouse">Warehouse</option>
-              <option value="Production">Production</option>
-              <option value="Maintenance">Maintenance</option>
+              {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
             </select>
           </div>
 
@@ -197,9 +238,7 @@ export default function Workers() {
               onChange={(e) => { setShiftFilter(e.target.value); setCurrentPage(1); }}
             >
               <option value="All">All Shifts</option>
-              <option value="Morning">Morning</option>
-              <option value="Afternoon">Afternoon</option>
-              <option value="Night">Night</option>
+              {STEEL_SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 
@@ -224,45 +263,63 @@ export default function Workers() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-8 h-8 border-2 border-white/[0.04] border-t-[#00E5FF] rounded-full animate-spin" />
-            <span className="text-xs" style={{ color: '#8899AA' }}>Syncing registry database...</span>
+            <span className="text-xs" style={{ color: '#8899AA' }}>Syncing workforce registry...</span>
           </div>
-        ) : filteredWorkers.length === 0 ? (
+        ) : sortedWorkers.length === 0 ? (
           <div className="text-center py-16">
             <i className="fas fa-user-slash text-2xl mb-3 text-[#FFB340]" />
-            <p className="text-xs font-bold text-white uppercase tracking-wider">No Worker Found</p>
-            <p className="text-[10px] mt-1" style={{ color: '#556677' }}>No operator matches the active filter query parameters.</p>
+            <p className="text-xs font-bold text-white uppercase tracking-wider">No Workers Found</p>
+            <p className="text-[10px] mt-1" style={{ color: '#556677' }}>No operator matches the active search or filter criteria.</p>
           </div>
         ) : (
           <div className="table-container">
             <table className="w-full">
               <thead>
                 <tr>
-                  <th>Employee ID</th>
-                  <th>Name</th>
-                  <th>Department</th>
-                  <th>Zone</th>
-                  <th>Assigned Machine</th>
-                  <th>Shift</th>
-                  <th>Status</th>
-                  <th>Attendance</th>
-                  <th>Working Hours</th>
+                  <th onClick={() => handleSort('employeeId')} className="cursor-pointer select-none">
+                    Employee ID {sortField === 'employeeId' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('name')} className="cursor-pointer select-none">
+                    Name {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('department')} className="cursor-pointer select-none">
+                    Department {sortField === 'department' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('zone')} className="cursor-pointer select-none">
+                    Zone {sortField === 'zone' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('assignedMachine')} className="cursor-pointer select-none">
+                    Assigned Machine {sortField === 'assignedMachine' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('shift')} className="cursor-pointer select-none">
+                    Shift {sortField === 'shift' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('attendance')} className="cursor-pointer select-none">
+                    Attendance {sortField === 'attendance' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('status')} className="cursor-pointer select-none">
+                    Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('workingHours')} className="cursor-pointer select-none">
+                    Working Hours {sortField === 'workingHours' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {currentRows.map((worker) => (
                   <tr 
-                    key={worker.employeeId} 
+                    key={worker.employeeId || worker.id} 
                     onClick={() => handleRowClick(worker)}
                     className="cursor-pointer hover:bg-white/[0.02]"
                   >
-                    <td className="font-mono text-xs font-semibold text-[#00E5FF]">{worker.employeeId}</td>
+                    <td className="font-mono text-xs font-bold text-[#00E5FF]">{worker.employeeId}</td>
                     <td className="text-xs font-bold text-white">{worker.name}</td>
                     <td className="text-xs" style={{ color: '#8899AA' }}>{worker.department}</td>
                     <td className="text-xs font-medium text-white">{worker.zone}</td>
                     <td className="text-xs" style={{ color: '#8899AA' }}>{worker.assignedMachine}</td>
                     <td className="text-xs" style={{ color: '#8899AA' }}>{worker.shift}</td>
-                    <td>{renderStatus(worker.status)}</td>
                     <td className="text-xs font-bold text-white">{worker.attendance}%</td>
+                    <td>{renderStatus(worker.status)}</td>
                     <td className="text-xs font-bold text-white">{worker.workingHours}h</td>
                   </tr>
                 ))}
@@ -273,11 +330,25 @@ export default function Workers() {
       </div>
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center text-xs mt-4">
-          <span style={{ color: '#556677' }}>
-            Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredWorkers.length)} of {filteredWorkers.length} employees
+      <div className="flex justify-between items-center text-xs mt-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2" style={{ color: '#556677' }}>
+          <span>Rows per page:</span>
+          <select
+            className="filter-select text-xs font-semibold py-1 px-2"
+            value={rowsPerPage}
+            onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+          >
+            <option value={10}>10</option>
+            <option value={15}>15</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
+          <span className="ml-2">
+            Showing {indexOfFirstRow + 1} - {Math.min(indexOfLastRow, sortedWorkers.length)} of {sortedWorkers.length} employees
           </span>
+        </div>
+
+        {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button 
               disabled={currentPage === 1}
@@ -295,14 +366,13 @@ export default function Workers() {
               <i className="fas fa-chevron-right" />
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Slide-out Profile Drawer */}
       <AnimatePresence>
         {isDrawerOpen && (
           <>
-            {/* Backdrop */}
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -310,7 +380,6 @@ export default function Workers() {
               onClick={() => setIsDrawerOpen(false)}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
             />
-            {/* Drawer */}
             <motion.div 
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
@@ -318,18 +387,17 @@ export default function Workers() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="fixed right-0 top-0 h-full w-full max-w-md z-[101] flex flex-col p-6 overflow-y-auto"
               style={{
-                background: 'linear-gradient(135deg, rgba(12, 26, 44, 0.98) 0%, rgba(6, 14, 24, 0.99) 100%)',
-                borderLeft: '1px solid rgba(0, 102, 255, 0.12)',
-                boxShadow: '-10px 0 40px rgba(0,0,0,0.5)',
+                background: 'var(--bg-card)',
+                borderLeft: '1px solid var(--border-color)',
+                boxShadow: 'var(--card-shadow)',
               }}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-white/[0.04] mb-6">
+              <div className="flex items-center justify-between pb-4 border-b mb-6" style={{ borderColor: 'var(--border-color)' }}>
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-widest">
-                    {selectedWorker ? 'Worker Station Profile' : 'Register Operator'}
+                  <h3 className="text-sm font-bold uppercase tracking-widest" style={{ color: 'var(--text-main)' }}>
+                    {selectedWorker ? 'Worker Station Profile' : 'Register Steel Operator'}
                   </h3>
-                  <small style={{ color: '#8899AA' }}>{selectedWorker ? selectedWorker.employeeId : 'Industry 4.0 Platform'}</small>
+                  <small style={{ color: 'var(--text-secondary)' }}>{selectedWorker ? selectedWorker.employeeId : 'Firestore Registry'}</small>
                 </div>
                 <button 
                   onClick={() => setIsDrawerOpen(false)}
@@ -339,7 +407,6 @@ export default function Workers() {
                 </button>
               </div>
 
-              {/* Editing Form vs. View Details */}
               {isEditing ? (
                 <form onSubmit={handleSubmit} className="space-y-4 flex-1">
                   <div>
@@ -347,7 +414,7 @@ export default function Workers() {
                     <input 
                       type="text" 
                       className="input text-xs font-mono !py-2.5" 
-                      placeholder="e.g. W-007" 
+                      placeholder="e.g. EMP1001" 
                       required
                       value={formState.employeeId}
                       onChange={(e) => setFormState({ ...formState, employeeId: e.target.value })}
@@ -358,7 +425,7 @@ export default function Workers() {
                     <input 
                       type="text" 
                       className="input text-xs !py-2.5" 
-                      placeholder="e.g. Arthur Pendragon" 
+                      placeholder="Full Name" 
                       required
                       value={formState.name}
                       onChange={(e) => setFormState({ ...formState, name: e.target.value })}
@@ -366,13 +433,42 @@ export default function Workers() {
                   </div>
                   <div>
                     <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Department</label>
+                    <select 
+                      className="input text-xs"
+                      value={formState.department}
+                      onChange={(e) => setFormState({ ...formState, department: e.target.value })}
+                    >
+                      {STEEL_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Designation</label>
+                    <select 
+                      className="input text-xs"
+                      value={formState.designation}
+                      onChange={(e) => setFormState({ ...formState, designation: e.target.value })}
+                    >
+                      {STEEL_DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Zone</label>
+                    <select 
+                      className="input text-xs"
+                      value={formState.zone}
+                      onChange={(e) => setFormState({ ...formState, zone: e.target.value })}
+                    >
+                      {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Assigned Machine</label>
                     <input 
                       type="text" 
                       className="input text-xs !py-2.5" 
-                      placeholder="e.g. Machinery Maintenance" 
-                      required
-                      value={formState.department}
-                      onChange={(e) => setFormState({ ...formState, department: e.target.value })}
+                      placeholder="e.g. Blast Furnace" 
+                      value={formState.assignedMachine}
+                      onChange={(e) => setFormState({ ...formState, assignedMachine: e.target.value })}
                     />
                   </div>
                   <div>
@@ -382,35 +478,8 @@ export default function Workers() {
                       value={formState.shift}
                       onChange={(e) => setFormState({ ...formState, shift: e.target.value })}
                     >
-                      <option value="Morning">Morning</option>
-                      <option value="Afternoon">Afternoon</option>
-                      <option value="Night">Night</option>
+                      {STEEL_SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Factory Zone</label>
-                    <select 
-                      className="input text-xs"
-                      value={formState.zone}
-                      onChange={(e) => setFormState({ ...formState, zone: e.target.value })}
-                    >
-                      <option value="Assembly">Assembly</option>
-                      <option value="Packaging">Packaging</option>
-                      <option value="Quality Control">Quality Control</option>
-                      <option value="Warehouse">Warehouse</option>
-                      <option value="Production">Production</option>
-                      <option value="Maintenance">Maintenance</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Assigned Machine</label>
-                    <input 
-                      type="text" 
-                      className="input text-xs !py-2.5" 
-                      placeholder="e.g. CNC Lathe A1" 
-                      value={formState.assignedMachine}
-                      onChange={(e) => setFormState({ ...formState, assignedMachine: e.target.value })}
-                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -465,33 +534,33 @@ export default function Workers() {
                 </form>
               ) : (
                 <div className="space-y-6 flex-1 flex flex-col justify-between">
-                  {/* Detailed view */}
                   <div className="space-y-5">
-                    {/* Header profile details */}
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold"
                         style={{ background: 'linear-gradient(135deg, rgba(0, 102, 255, 0.25), rgba(0, 229, 255, 0.15))', color: '#00E5FF', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
-                        {selectedWorker.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                        {selectedWorker.name ? selectedWorker.name.split(' ').map(n => n[0]).join('').slice(0, 2) : 'EM'}
                       </div>
                       <div>
                         <h4 className="text-base font-bold text-white">{selectedWorker.name}</h4>
-                        <span className="text-xs" style={{ color: '#00E5FF' }}>Code: {selectedWorker.employeeId}</span>
+                        <span className="text-xs" style={{ color: '#00E5FF' }}>ID: {selectedWorker.employeeId}</span>
                       </div>
                     </div>
 
                     <div className="h-px bg-white/[0.04]" />
 
-                    {/* Meta Lists */}
-                    <div className="space-y-4 text-xs">
+                    <div className="space-y-3 text-xs">
                       {[
-                        { label: 'Department / Station', val: selectedWorker.department },
-                        { label: 'Operational Zone', val: selectedWorker.zone },
-                        { label: 'Assigned Machinery', val: selectedWorker.assignedMachine },
-                        { label: 'Work Shift', val: selectedWorker.shift },
-                        { label: 'Current Logged Hours', val: `${selectedWorker.workingHours} Hours` },
+                        { label: 'Department', val: selectedWorker.department },
+                        { label: 'Designation', val: selectedWorker.designation || 'Machine Operator' },
+                        { label: 'Plant Zone', val: selectedWorker.zone },
+                        { label: 'Assigned Machine', val: selectedWorker.assignedMachine },
+                        { label: 'Shift', val: selectedWorker.shift },
                         { label: 'Attendance Rate', val: `${selectedWorker.attendance}%` },
-                        { label: 'Work Station performance', val: `${selectedWorker.performance || 85}%` },
-                        { label: 'Role Permissions', val: selectedWorker.role.toUpperCase() }
+                        { label: 'Status', val: selectedWorker.status },
+                        { label: 'Today Logged Hours', val: `${selectedWorker.workingHours} Hours` },
+                        { label: 'Overtime', val: `${selectedWorker.overtime || 0} Hours` },
+                        { label: 'Experience', val: `${selectedWorker.experience || 4} Years` },
+                        { label: 'Contact Phone', val: selectedWorker.phone || 'N/A' }
                       ].map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center py-2 border-b border-white/[0.02]">
                           <span style={{ color: '#556677' }} className="font-semibold uppercase text-[9px] tracking-wider">{item.label}</span>
@@ -501,7 +570,6 @@ export default function Workers() {
                     </div>
                   </div>
 
-                  {/* Actions footer */}
                   <div className="flex gap-3 pt-6 border-t border-white/[0.04]">
                     <button 
                       onClick={() => setIsEditing(true)}

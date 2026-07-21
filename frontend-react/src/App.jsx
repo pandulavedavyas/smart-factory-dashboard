@@ -9,10 +9,14 @@ const WorkerLogin = lazy(() => import('./pages/auth/WorkerLogin'));
 const AdminLogin = lazy(() => import('./pages/auth/AdminLogin'));
 const AccessDenied = lazy(() => import('./pages/AccessDenied'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ManufacturingWorkflow = lazy(() => import('./pages/ManufacturingWorkflow'));
+const AIAssistant = lazy(() => import('./pages/AIAssistant'));
 const Workers = lazy(() => import('./pages/Workers'));
 const Machinery = lazy(() => import('./pages/Machinery'));
 const Production = lazy(() => import('./pages/Production'));
+const Materials = lazy(() => import('./pages/Materials'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Users = lazy(() => import('./pages/Users'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 
@@ -32,17 +36,21 @@ function Loading() {
 
 const PAGE_MAP = {
   dashboard: Dashboard,
+  workflow: ManufacturingWorkflow,
+  'ai-assistant': AIAssistant,
   workers: Workers,
   machinery: Machinery,
   production: Production,
+  inventory: Materials,
   reports: Reports,
+  users: Users,
   settings: Settings,
   notifications: Notifications
 };
 
 const ROLE_PERMISSIONS = {
-  admin: ['dashboard', 'workers', 'machinery', 'production', 'reports', 'settings', 'notifications'],
-  worker: ['dashboard', 'notifications']
+  admin: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'users', 'settings', 'notifications'],
+  worker: ['dashboard', 'workflow', 'ai-assistant', 'notifications']
 };
 
 function DashboardRouter({ base = '/dashboard', mode }) {

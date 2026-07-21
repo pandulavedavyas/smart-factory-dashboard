@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getMachines, saveMachine, deleteMachine } from '../services/firestoreService';
+import { subscribeCollection, saveMachine, deleteMachine, toggleMachinePower, updateMachineStatus } from '../services/firestoreService';
+import { STEEL_ZONES } from '../services/steelDataSeed';
 import { useToast } from '../context/ToastContext';
 
 export default function Machinery() {
@@ -9,51 +10,66 @@ export default function Machinery() {
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(6);
+  const [rowsPerPage] = useState(9);
 
-  // Drawer
+  // Drawer states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState({
     machineName: '',
     machineId: '',
-    zone: 'Assembly',
-    temperature: 65.0,
+    zone: STEEL_ZONES[0],
+    operator: 'Unassigned',
     status: 'Running',
-    health: 90,
+    power: 'ON',
+    temperature: 650,
     workingHours: 1200,
-    assignedOperator: 'None',
-    currentShift: 'Morning',
+    health: 90,
+    efficiency: 95.0,
     lastMaintenance: '2026-07-01'
   });
 
   const { showToast } = useToast();
 
   useEffect(() => {
-    loadMachinesData();
+    // Real-time Firestore subscription to 'machines'
+    const unsubscribe = subscribeCollection('machines', (data) => {
+      setMachines(data);
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  async function loadMachinesData() {
+  const handlePowerToggle = async (machineId, currentPower) => {
+    const nextPower = currentPower === 'OFF' ? 'ON' : 'OFF';
     try {
-      setLoading(true);
-      const data = await getMachines();
-      setMachines(data);
+      await toggleMachinePower(machineId, nextPower);
+      showToast(nextPower === 'OFF' ? `Machine ${machineId} powered OFF. Alert generated!` : `Machine ${machineId} powered ON. Operations resumed.`, nextPower === 'OFF' ? 'error' : 'success');
     } catch (err) {
-      showToast('Error syncing machinery telemetry', 'error');
-    } finally {
-      setLoading(false);
+      showToast('Error toggling machine power', 'error');
     }
-  }
+  };
+
+  const handleStatusChange = async (machineId, newStatus) => {
+    try {
+      await updateMachineStatus(machineId, newStatus);
+      showToast(`Machine ${machineId} state updated to ${newStatus}`);
+    } catch (err) {
+      showToast('Error updating machine status', 'error');
+    }
+  };
 
   // Search & Filter
   const filteredMachines = machines.filter(m => {
-    const matchesSearch = m.machineName?.toLowerCase().includes(search.toLowerCase()) ||
-                          m.machineId?.toLowerCase().includes(search.toLowerCase()) ||
-                          m.assignedOperator?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (m.machineName || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (m.machineId || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (m.operator || '').toLowerCase().includes(search.toLowerCase()) ||
+                          (m.stageName || '').toLowerCase().includes(search.toLowerCase());
     const matchesZone = zoneFilter === 'All' || m.zone === zoneFilter;
     const matchesStatus = statusFilter === 'All' || m.status === statusFilter;
     return matchesSearch && matchesZone && matchesStatus;
@@ -63,7 +79,7 @@ export default function Machinery() {
   const indexOfLastRow = currentPage * rowsPerPage;
   const indexOfFirstRow = indexOfLastRow - rowsPerPage;
   const currentRows = filteredMachines.slice(indexOfFirstRow, indexOfLastRow);
-  const totalPages = Math.ceil(filteredMachines.length / rowsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredMachines.length / rowsPerPage));
 
   const handleRowClick = (mach) => {
     setSelectedMachine(mach);
@@ -74,16 +90,18 @@ export default function Machinery() {
 
   const handleCreateNewClick = () => {
     setSelectedMachine(null);
+    const idNum = machines.length + 1;
     setFormState({
       machineName: '',
-      machineId: 'M-00' + (machines.length + 1),
-      zone: 'Assembly',
-      temperature: 45.0,
-      status: 'Idle',
-      health: 100,
+      machineId: `MCH-${idNum < 10 ? '00' + idNum : idNum < 100 ? '0' + idNum : idNum}`,
+      zone: STEEL_ZONES[0],
+      operator: 'Unassigned',
+      status: 'Running',
+      power: 'ON',
+      temperature: 450,
       workingHours: 0,
-      assignedOperator: 'None',
-      currentShift: 'Morning',
+      health: 100,
+      efficiency: 98.0,
       lastMaintenance: new Date().toISOString().slice(0, 10)
     });
     setIsEditing(true);
@@ -96,7 +114,6 @@ export default function Machinery() {
         await deleteMachine(machId);
         showToast('Machine removed from registry successfully');
         setIsDrawerOpen(false);
-        loadMachinesData();
       } catch (err) {
         showToast('Failed to delete machine', 'error');
       }
@@ -109,83 +126,25 @@ export default function Machinery() {
       await saveMachine(formState);
       showToast(selectedMachine ? 'Machine telemetry updated' : 'Machine registered successfully');
       setIsDrawerOpen(false);
-      loadMachinesData();
     } catch (err) {
       showToast('Error saving machine parameters', 'error');
     }
   };
 
-  // Status badges
-  const renderStatus = (status) => {
+  const renderStatus = (status, power) => {
+    if (power === 'OFF' || status === 'Offline') {
+      return <span className="status-badge status-down">🔴 OFF / Offline</span>;
+    }
     switch (status) {
       case 'Running':
         return <span className="status-badge status-running">🟢 Running</span>;
       case 'Idle':
         return <span className="status-badge status-idle">🟡 Idle</span>;
       case 'Maintenance':
+        return <span className="status-badge status-warning">🟠 Maintenance</span>;
       default:
-        return <span className="status-badge status-down">🔴 Maintenance</span>;
+        return <span className="status-badge status-down">⚪ Offline</span>;
     }
-  };
-
-  // Animated Circular Gauge Component for Health
-  const CircularHealthGauge = ({ val, size = 110 }) => {
-    const strokeWidth = 8;
-    const radius = (size - strokeWidth * 2) / 2;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference * (1 - val / 100);
-    const color = val >= 85 ? '#00D68F' : val >= 60 ? '#FFB340' : '#FF4757';
-
-    return (
-      <div className="flex flex-col items-center gap-2">
-        <div className="relative" style={{ width: size, height: size }}>
-          <svg width={size} height={size} className="-rotate-90">
-            {/* Background circle */}
-            <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth={strokeWidth} />
-            {/* Dynamic circle */}
-            <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
-              strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center flex-col">
-            <span className="text-base font-bold text-white">{val}%</span>
-            <span className="text-[7px] font-extrabold uppercase tracking-widest" style={{ color: '#556677' }}>Core health</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Temperature Gauge Progress Bar Component
-  const TemperatureGauge = ({ temp }) => {
-    // Limits: Max 100°C. High temperature alerts at 75°C.
-    const pct = Math.min((temp / 100) * 100, 100);
-    const color = temp >= 75 ? 'linear-gradient(90deg, #FFB340, #FF4757)' : 'linear-gradient(90deg, #00E5FF, #00D68F)';
-    const glow = temp >= 75 ? 'rgba(255, 71, 87, 0.4)' : 'rgba(0, 229, 255, 0.2)';
-
-    return (
-      <div className="w-full space-y-2">
-        <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-white">
-          <span style={{ color: '#556677' }}>Thermal State</span>
-          <span style={{ color: temp >= 75 ? '#FF4757' : '#00E5FF' }}>{temp}°C</span>
-        </div>
-        <div className="h-3 rounded-full overflow-hidden w-full relative" style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <div 
-            className="h-full rounded-full transition-all duration-1000 ease-out"
-            style={{
-              width: `${pct}%`,
-              background: color,
-              boxShadow: `0 0 10px ${glow}`
-            }}
-          />
-        </div>
-        <div className="flex justify-between text-[8px] font-bold uppercase" style={{ color: '#556677' }}>
-          <span>0°C Min</span>
-          <span>75°C Warning</span>
-          <span>100°C Critical</span>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -193,16 +152,35 @@ export default function Machinery() {
       {/* Title */}
       <div className="flex justify-between items-center flex-wrap gap-4">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-xl font-bold text-white tracking-tight uppercase">Plant Machinery Telemetry</h1>
-          <p className="text-xs" style={{ color: '#8899AA' }}>Monitor live machine temperature, health, operational hours, and status.</p>
+          <h1 className="text-xl font-bold text-white tracking-tight uppercase">Steel Equipment Telemetry & Controls</h1>
+          <p className="text-xs" style={{ color: '#8899AA' }}>Real-time telemetry monitoring and manual machine power controls for 35+ steel manufacturing units.</p>
         </motion.div>
-        <button 
-          onClick={handleCreateNewClick}
-          className="btn-primary flex items-center gap-2"
-        >
-          <i className="fas fa-plus text-xs" />
-          <span>Register Machine</span>
-        </button>
+
+        <div className="flex items-center gap-3">
+          {/* View Mode Switcher */}
+          <div className="flex items-center p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <button 
+              onClick={() => setViewMode('grid')} 
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-[#0066FF] text-white' : 'text-[#8899AA]'}`}
+            >
+              <i className="fas fa-grip mr-1.5" /> Control Cards
+            </button>
+            <button 
+              onClick={() => setViewMode('table')} 
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-[#0066FF] text-white' : 'text-[#8899AA]'}`}
+            >
+              <i className="fas fa-list mr-1.5" /> Table View
+            </button>
+          </div>
+
+          <button 
+            onClick={handleCreateNewClick}
+            className="btn-primary flex items-center gap-2"
+          >
+            <i className="fas fa-plus text-xs" />
+            <span>Register Equipment</span>
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -213,7 +191,7 @@ export default function Machinery() {
           <input 
             type="text" 
             className="input !pl-10 !py-2.5 w-full text-xs"
-            placeholder="Search by Machine Name, ID, or Assigned Operator..."
+            placeholder="Search Machine Name, ID, Operator, or Stage..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
           />
@@ -229,17 +207,12 @@ export default function Machinery() {
               onChange={(e) => { setZoneFilter(e.target.value); setCurrentPage(1); }}
             >
               <option value="All">All Zones</option>
-              <option value="Assembly">Assembly</option>
-              <option value="Packaging">Packaging</option>
-              <option value="Quality Control">Quality Control</option>
-              <option value="Warehouse">Warehouse</option>
-              <option value="Production">Production</option>
-              <option value="Maintenance">Maintenance</option>
+              {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
             </select>
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Operational Status</span>
+            <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: '#556677' }}>Status</span>
             <select 
               className="filter-select text-xs font-semibold"
               value={statusFilter}
@@ -249,79 +222,116 @@ export default function Machinery() {
               <option value="Running">Running</option>
               <option value="Idle">Idle</option>
               <option value="Maintenance">Maintenance</option>
+              <option value="Offline">Offline</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Main datatable */}
-      <div className="glass-card-premium p-1">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-8 h-8 border-2 border-white/[0.04] border-t-[#00E5FF] rounded-full animate-spin" />
-            <span className="text-xs" style={{ color: '#8899AA' }}>Syncing machinery diagnostics...</span>
-          </div>
-        ) : filteredMachines.length === 0 ? (
-          <div className="text-center py-16">
-            <i className="fas fa-microchip text-2xl mb-3 text-[#FFB340]" />
-            <p className="text-xs font-bold text-white uppercase tracking-wider">No Machinery Found</p>
-            <p className="text-[10px] mt-1" style={{ color: '#556677' }}>No connected hardware logs match the active parameters.</p>
-          </div>
-        ) : (
+      {/* Content Rendering (Grid View or Table View) */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-2 border-white/[0.04] border-t-[#00E5FF] rounded-full animate-spin" />
+          <span className="text-xs" style={{ color: '#8899AA' }}>Syncing equipment telemetry...</span>
+        </div>
+      ) : filteredMachines.length === 0 ? (
+        <div className="glass-card-premium text-center py-16">
+          <i className="fas fa-microchip text-2xl mb-3 text-[#FFB340]" />
+          <p className="text-xs font-bold text-white uppercase tracking-wider">No Machinery Found</p>
+          <p className="text-[10px] mt-1" style={{ color: '#556677' }}>No connected hardware logs match the active parameters.</p>
+        </div>
+      ) : viewMode === 'grid' ? (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {currentRows.map((mach) => (
+            <MachineControlCard
+              key={mach.machineId || mach.id}
+              machine={mach}
+              onRowClick={() => handleRowClick(mach)}
+              onPowerToggle={handlePowerToggle}
+              onStatusChange={handleStatusChange}
+              renderStatus={renderStatus}
+            />
+          ))}
+        </div>
+      ) : (
+        /* Table View */
+        <div className="glass-card-premium p-1">
           <div className="table-container">
             <table className="w-full">
               <thead>
                 <tr>
                   <th>Machine Name</th>
-                  <th>Machine ID</th>
-                  <th>Zone</th>
-                  <th>Temperature</th>
+                  <th>Zone & Stage</th>
+                  <th>Operator</th>
                   <th>Status</th>
-                  <th>Health Score</th>
+                  <th>Temperature</th>
                   <th>Working Hours</th>
-                  <th>Assigned Operator</th>
+                  <th>Health</th>
+                  <th>Efficiency</th>
+                  <th>Power Switch</th>
                 </tr>
               </thead>
               <tbody>
-                {currentRows.map((mach) => (
-                  <tr 
-                    key={mach.machineId} 
-                    onClick={() => handleRowClick(mach)}
-                    className="cursor-pointer hover:bg-white/[0.02]"
-                  >
-                    <td className="text-xs font-bold text-white">{mach.machineName}</td>
-                    <td className="font-mono text-xs font-semibold text-[#00E5FF]">{mach.machineId}</td>
-                    <td className="text-xs font-medium text-white">{mach.zone}</td>
-                    <td className="text-xs font-bold" style={{ color: mach.temperature >= 75 ? '#FF4757' : '#8899AA' }}>
-                      {mach.temperature}°C
-                    </td>
-                    <td>{renderStatus(mach.status)}</td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <div className="w-12 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                          <div className="h-full rounded-full" style={{
-                            width: `${mach.health}%`,
-                            background: mach.health >= 85 ? '#00D68F' : mach.health >= 60 ? '#FFB340' : '#FF4757'
-                          }} />
+                {currentRows.map((mach) => {
+                  const isOff = mach.power === 'OFF' || mach.status === 'Offline';
+                  return (
+                    <tr 
+                      key={mach.machineId || mach.id} 
+                      className="hover:bg-white/[0.02]"
+                    >
+                      <td className="text-xs font-bold text-white flex items-center gap-2 cursor-pointer" onClick={() => handleRowClick(mach)}>
+                        <i className="fas fa-gear text-[10px] text-[#00E5FF]" />
+                        <div>
+                          <div>{mach.machineName}</div>
+                          <span className="text-[9px] font-mono text-[#00E5FF]">{mach.machineId}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-white">{mach.health}%</span>
-                      </div>
-                    </td>
-                    <td className="text-xs font-bold text-white">{mach.workingHours}h</td>
-                    <td className="text-xs" style={{ color: '#8899AA' }}>{mach.assignedOperator}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="text-xs font-medium text-white cursor-pointer" onClick={() => handleRowClick(mach)}>
+                        <div>{mach.zone}</div>
+                        <span className="text-[9px] text-[#8899AA]">{mach.stageName || 'Factory Floor'}</span>
+                      </td>
+                      <td className="text-xs cursor-pointer" style={{ color: '#8899AA' }} onClick={() => handleRowClick(mach)}>{mach.operator || 'Unassigned'}</td>
+                      <td>{renderStatus(mach.status, mach.power)}</td>
+                      <td className="text-xs font-bold" style={{ color: mach.temperature >= 1000 ? '#FF4757' : mach.temperature >= 500 ? '#FFB340' : '#00E5FF' }}>
+                        {mach.temperature}°C
+                      </td>
+                      <td className="text-xs font-bold text-white">{mach.workingHours} hrs</td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <div className="w-12 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                            <div className="h-full rounded-full" style={{
+                              width: `${Math.min(mach.health || 0, 100)}%`,
+                              background: mach.health >= 85 ? '#00D68F' : mach.health >= 60 ? '#FFB340' : '#FF4757'
+                            }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-white">{mach.health}%</span>
+                        </div>
+                      </td>
+                      <td className="text-xs font-bold text-white">{mach.efficiency || 95}%</td>
+                      <td>
+                        <button
+                          onClick={() => handlePowerToggle(mach.machineId || mach.id, mach.power || (isOff ? 'OFF' : 'ON'))}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase transition-all ${
+                            isOff ? 'bg-[#FF4757] text-white shadow-[0_0_10px_rgba(255,71,87,0.4)]' : 'bg-[#00D68F] text-white shadow-[0_0_10px_rgba(0,214,143,0.4)]'
+                          }`}
+                        >
+                          {mach.power === 'OFF' || isOff ? 'OFF' : 'ON'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-between items-center text-xs mt-4">
           <span style={{ color: '#556677' }}>
-            Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredMachines.length)} of {filteredMachines.length} machinery items
+            Showing {indexOfFirstRow + 1} to {Math.min(indexOfLastRow, filteredMachines.length)} of {filteredMachines.length} steel units
           </span>
           <div className="flex items-center gap-2">
             <button 
@@ -362,226 +372,220 @@ export default function Machinery() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="fixed right-0 top-0 h-full w-full max-w-md z-[101] flex flex-col p-6 overflow-y-auto"
               style={{
-                background: 'linear-gradient(135deg, rgba(12, 26, 44, 0.98) 0%, rgba(6, 14, 24, 0.99) 100%)',
-                borderLeft: '1px solid rgba(0, 102, 255, 0.12)',
-                boxShadow: '-10px 0 40px rgba(0,0,0,0.5)',
+                background: 'var(--bg-card)',
+                borderLeft: '1px solid var(--border-color)',
+                boxShadow: 'var(--card-shadow)'
               }}
             >
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-white/[0.04] mb-6">
-                <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-widest">
-                    {selectedMachine ? 'Machine Status Card' : 'Register Machine'}
-                  </h3>
-                  <small style={{ color: '#8899AA' }}>{selectedMachine ? selectedMachine.machineId : 'Telemetry Node'}</small>
-                </div>
-                <button 
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="chart-toolbar-btn w-8 h-8 flex items-center justify-center hover:bg-white/[0.06] rounded-lg"
-                >
-                  <i className="fas fa-xmark text-xs" />
+              <div className="flex justify-between items-center pb-4 mb-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--text-main)' }}>
+                  {selectedMachine ? `Machine Telemetry (${selectedMachine.machineId})` : 'Register Equipment'}
+                </h3>
+                <button onClick={() => setIsDrawerOpen(false)} className="text-[#8899AA] hover:text-white">
+                  <i className="fas fa-times text-sm" />
                 </button>
               </div>
 
-              {isEditing ? (
-                <form onSubmit={handleSubmit} className="space-y-4 flex-1">
+              <form onSubmit={handleSubmit} className="space-y-4 flex-1">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Machine Name</label>
+                  <input 
+                    type="text" 
+                    required 
+                    className="input w-full text-xs" 
+                    value={formState.machineName}
+                    onChange={(e) => setFormState({ ...formState, machineName: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Zone</label>
+                  <select 
+                    className="filter-select w-full text-xs font-semibold"
+                    value={formState.zone}
+                    onChange={(e) => setFormState({ ...formState, zone: e.target.value })}
+                  >
+                    {STEEL_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Machine Name</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Assigned Operator</label>
                     <input 
                       type="text" 
-                      className="input text-xs !py-2.5" 
-                      placeholder="e.g. Laser Engraver F1" 
-                      required
-                      value={formState.machineName}
-                      onChange={(e) => setFormState({ ...formState, machineName: e.target.value })}
+                      className="input w-full text-xs" 
+                      value={formState.operator}
+                      onChange={(e) => setFormState({ ...formState, operator: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Machine ID</label>
-                    <input 
-                      type="text" 
-                      className="input text-xs font-mono !py-2.5" 
-                      placeholder="e.g. M-010" 
-                      required
-                      value={formState.machineId}
-                      onChange={(e) => setFormState({ ...formState, machineId: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Factory Zone</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Status</label>
                     <select 
-                      className="input text-xs"
-                      value={formState.zone}
-                      onChange={(e) => setFormState({ ...formState, zone: e.target.value })}
-                    >
-                      <option value="Assembly">Assembly</option>
-                      <option value="Packaging">Packaging</option>
-                      <option value="Quality Control">Quality Control</option>
-                      <option value="Warehouse">Warehouse</option>
-                      <option value="Production">Production</option>
-                      <option value="Maintenance">Maintenance</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Temperature (°C)</label>
-                      <input 
-                        type="number" 
-                        step="0.1" 
-                        className="input text-xs !py-2.5" 
-                        value={formState.temperature}
-                        onChange={(e) => setFormState({ ...formState, temperature: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Health Score (%)</label>
-                      <input 
-                        type="number" 
-                        className="input text-xs !py-2.5" 
-                        value={formState.health}
-                        onChange={(e) => setFormState({ ...formState, health: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Working Hours</label>
-                    <input 
-                      type="number" 
-                      className="input text-xs !py-2.5" 
-                      value={formState.workingHours}
-                      onChange={(e) => setFormState({ ...formState, workingHours: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Assigned Operator</label>
-                    <input 
-                      type="text" 
-                      className="input text-xs !py-2.5" 
-                      placeholder="Operator Name" 
-                      value={formState.assignedOperator}
-                      onChange={(e) => setFormState({ ...formState, assignedOperator: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Current Shift</label>
-                    <select 
-                      className="input text-xs"
-                      value={formState.currentShift}
-                      onChange={(e) => setFormState({ ...formState, currentShift: e.target.value })}
-                    >
-                      <option value="Morning">Morning</option>
-                      <option value="Afternoon">Afternoon</option>
-                      <option value="Night">Night</option>
-                      <option value="None">None</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Status</label>
-                    <select 
-                      className="input text-xs"
+                      className="filter-select w-full text-xs font-semibold"
                       value={formState.status}
                       onChange={(e) => setFormState({ ...formState, status: e.target.value })}
                     >
                       <option value="Running">Running</option>
                       <option value="Idle">Idle</option>
                       <option value="Maintenance">Maintenance</option>
+                      <option value="Offline">Offline</option>
                     </select>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: '#556677' }}>Last Maintenance Date</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Temperature (°C)</label>
                     <input 
-                      type="date" 
-                      className="input text-xs !py-2.5" 
-                      value={formState.lastMaintenance}
-                      onChange={(e) => setFormState({ ...formState, lastMaintenance: e.target.value })}
+                      type="number" 
+                      className="input w-full text-xs" 
+                      value={formState.temperature}
+                      onChange={(e) => setFormState({ ...formState, temperature: Number(e.target.value) })}
                     />
                   </div>
-
-                  <div className="flex gap-3 pt-6">
-                    <button 
-                      type="submit" 
-                      className="btn-primary flex-1 py-3 text-xs"
-                      style={{ background: 'linear-gradient(135deg, #00D68F, #00B376)' }}
-                    >
-                      <i className="fas fa-save mr-2" /> Save Parameters
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => selectedMachine ? setIsEditing(false) : setIsDrawerOpen(false)}
-                      className="btn-secondary text-xs"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-6 flex-1 flex flex-col justify-between">
-                  {/* Views */}
-                  <div className="space-y-6">
-                    {/* Header info */}
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white"
-                        style={{
-                          background: selectedMachine.status === 'Running' ? 'rgba(0, 214, 143, 0.12)' : selectedMachine.status === 'Idle' ? 'rgba(255, 179, 64, 0.12)' : 'rgba(255, 71, 87, 0.12)',
-                          color: selectedMachine.status === 'Running' ? '#00D68F' : selectedMachine.status === 'Idle' ? '#FFB340' : '#FF4757'
-                        }}>
-                        <i className="fas fa-gears text-lg" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">{selectedMachine.machineName}</h4>
-                        <span className="text-[10px] font-semibold text-[#00E5FF] uppercase tracking-wider">{selectedMachine.zone} Node</span>
-                      </div>
-                    </div>
-
-                    <div className="h-px bg-white/[0.04]" />
-
-                    {/* Circular Health indicator & Temperature Gauge */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
-                      <CircularHealthGauge val={selectedMachine.health} />
-                      <TemperatureGauge temp={selectedMachine.temperature} />
-                    </div>
-
-                    <div className="h-px bg-white/[0.04]" />
-
-                    {/* Operational detail list */}
-                    <div className="space-y-3 text-xs">
-                      {[
-                        { label: 'Asset Model ID', val: selectedMachine.machineId },
-                        { label: 'Plant Zone Location', val: selectedMachine.zone },
-                        { label: 'Operating hours logged', val: `${selectedMachine.workingHours} Hours` },
-                        { label: 'Current Shift Allocation', val: selectedMachine.currentShift },
-                        { label: 'Assigned Station Operator', val: selectedMachine.assignedOperator },
-                        { label: 'Last Maintenance Audit', val: selectedMachine.lastMaintenance }
-                      ].map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center py-2 border-b border-white/[0.02]">
-                          <span style={{ color: '#556677' }} className="font-semibold uppercase text-[9px] tracking-wider">{item.label}</span>
-                          <span className="font-bold text-white text-right">{item.val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Actions footer */}
-                  <div className="flex gap-3 pt-6 border-t border-white/[0.04]">
-                    <button 
-                      onClick={() => setIsEditing(true)}
-                      className="btn-primary flex-1 py-3 text-xs"
-                    >
-                      <i className="fas fa-screwdriver-wrench mr-2" /> Modify Parameters
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(selectedMachine.machineId)}
-                      className="btn-danger py-3 text-xs flex items-center justify-center"
-                    >
-                      <i className="fas fa-trash-can mr-2" /> Decommission
-                    </button>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Working Hours</label>
+                    <input 
+                      type="number" 
+                      className="input w-full text-xs" 
+                      value={formState.workingHours}
+                      onChange={(e) => setFormState({ ...formState, workingHours: Number(e.target.value) })}
+                    />
                   </div>
                 </div>
-              )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Health Index (%)</label>
+                    <input 
+                      type="number" 
+                      className="input w-full text-xs" 
+                      value={formState.health}
+                      onChange={(e) => setFormState({ ...formState, health: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-[#8899AA]">Efficiency (%)</label>
+                    <input 
+                      type="number" 
+                      className="input w-full text-xs" 
+                      value={formState.efficiency}
+                      onChange={(e) => setFormState({ ...formState, efficiency: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button type="submit" className="btn-primary flex-1 py-2.5 text-xs font-bold uppercase">
+                    Save Changes
+                  </button>
+                  {selectedMachine && (
+                    <button 
+                      type="button" 
+                      onClick={() => handleDelete(selectedMachine.machineId || selectedMachine.id)}
+                      className="btn-danger py-2.5 px-4 text-xs font-bold uppercase"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </form>
             </motion.div>
           </>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Machine Control Card Subcomponent
+function MachineControlCard({ machine, onRowClick, onPowerToggle, onStatusChange, renderStatus }) {
+  const isOff = machine.power === 'OFF' || machine.status === 'Offline';
+
+  return (
+    <div 
+      className={`glass-card-premium p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
+        isOff ? 'border-[#FF4757]/40 shadow-[0_4px_25px_rgba(255,71,87,0.15)]' : ''
+      }`}
+    >
+      <div>
+        <div className="flex justify-between items-start gap-2 mb-3">
+          <div className="cursor-pointer" onClick={onRowClick}>
+            <span className="text-[9px] font-mono font-bold text-[#00E5FF]">{machine.machineId}</span>
+            <h4 className="text-sm font-bold text-white leading-tight hover:text-[#00E5FF] transition-colors">{machine.machineName}</h4>
+            <span className="text-[10px] text-[#8899AA] block mt-0.5">{machine.stageName || machine.zone}</span>
+          </div>
+          <div>{renderStatus(machine.status, machine.power)}</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 my-4 text-xs">
+          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Operator</span>
+            <span className="font-bold text-white truncate block">{machine.operator || 'Unassigned'}</span>
+          </div>
+          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Temperature</span>
+            <span className="font-bold block" style={{ color: machine.temperature >= 1000 ? '#FF4757' : machine.temperature >= 500 ? '#FFB340' : '#00E5FF' }}>
+              {machine.temperature}°C
+            </span>
+          </div>
+          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Health</span>
+            <span className="font-bold text-white">{machine.health}%</span>
+          </div>
+          <div className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: '#556677' }}>Hours</span>
+            <span className="font-bold text-white">{machine.workingHours}h</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Control Bar */}
+      <div className="pt-3 border-t border-white/[0.06] space-y-3">
+        {/* Power Switch */}
+        <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ background: isOff ? 'rgba(255,71,87,0.1)' : 'rgba(0,214,143,0.1)' }}>
+          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <i className={`fas fa-power-off text-xs ${isOff ? 'text-[#FF4757]' : 'text-[#00D68F]'}`} /> Power Switch
+          </span>
+          <button
+            onClick={() => onPowerToggle(machine.machineId || machine.id, machine.power || (isOff ? 'OFF' : 'ON'))}
+            className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase transition-all ${
+              isOff ? 'bg-[#FF4757] text-white shadow-[0_0_10px_rgba(255,71,87,0.4)]' : 'bg-[#00D68F] text-white shadow-[0_0_10px_rgba(0,214,143,0.4)]'
+            }`}
+          >
+            {machine.power === 'OFF' || isOff ? 'OFF' : 'ON'}
+          </button>
+        </div>
+
+        {/* Action Controls */}
+        <div className="grid grid-cols-4 gap-1">
+          <button
+            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
+            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#00D68F] hover:bg-[#00D68F]/20 flex items-center justify-center gap-1"
+          >
+            <i className="fas fa-play text-[8px]" /> Start
+          </button>
+          <button
+            onClick={() => onStatusChange(machine.machineId || machine.id, 'Idle')}
+            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#FFB340] hover:bg-[#FFB340]/20 flex items-center justify-center gap-1"
+          >
+            <i className="fas fa-pause text-[8px]" /> Pause
+          </button>
+          <button
+            onClick={() => onStatusChange(machine.machineId || machine.id, 'Offline')}
+            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#FF4757] hover:bg-[#FF4757]/20 flex items-center justify-center gap-1"
+          >
+            <i className="fas fa-stop text-[8px]" /> Stop
+          </button>
+          <button
+            onClick={() => onStatusChange(machine.machineId || machine.id, 'Running')}
+            className="py-1 rounded text-[9px] font-bold uppercase bg-white/[0.04] text-[#00E5FF] hover:bg-[#00E5FF]/20 flex items-center justify-center gap-1"
+          >
+            <i className="fas fa-rotate text-[8px]" /> Restart
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

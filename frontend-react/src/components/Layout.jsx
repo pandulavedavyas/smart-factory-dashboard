@@ -2,18 +2,18 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import Chatbot from './Chatbot';
+import AIAssistantWidget from './AIAssistantWidget';
 
 export default function Layout({ currentPage, onNavigate, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#071A2F' }}>
+    <div className="flex min-h-screen transition-colors duration-300" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-main)' }}>
       {/* Background ambient effects */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full opacity-[0.03]" style={{ background: 'radial-gradient(circle, #0066FF 0%, transparent 70%)' }} />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full opacity-[0.02]" style={{ background: 'radial-gradient(circle, #00E5FF 0%, transparent 70%)' }} />
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-40">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full opacity-[0.05]" style={{ background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)' }} />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full opacity-[0.03]" style={{ background: 'radial-gradient(circle, var(--secondary) 0%, transparent 70%)' }} />
       </div>
 
       <Sidebar
@@ -50,7 +50,7 @@ export default function Layout({ currentPage, onNavigate, children }) {
         </main>
       </div>
 
-      <Chatbot />
+      <AIAssistantWidget />
     </div>
   );
 }
