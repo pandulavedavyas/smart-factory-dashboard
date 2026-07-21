@@ -43,17 +43,18 @@ const PAGE_MAP = {
   production: Production,
   inventory: Materials,
   reports: Reports,
+  analytics: Reports,
   users: Users,
   settings: Settings,
   notifications: Notifications
 };
 
 const ROLE_PERMISSIONS = {
-  admin: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'users', 'settings', 'notifications'],
-  worker: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'users', 'settings', 'notifications']
+  admin: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'analytics', 'users', 'settings', 'notifications'],
+  worker: ['dashboard', 'workflow', 'ai-assistant', 'workers', 'machinery', 'production', 'inventory', 'reports', 'analytics', 'users', 'settings', 'notifications']
 };
 
-function DashboardRouter({ base = '/dashboard', mode }) {
+function DashboardRouter({ base = '/admin/dashboard', mode }) {
   const { page } = useParams();
   const [currentPage, setCurrentPage] = useState(page || 'dashboard');
   const navigate = useNavigate();
@@ -61,19 +62,16 @@ function DashboardRouter({ base = '/dashboard', mode }) {
 
   useEffect(() => {
     const p = page || 'dashboard';
-    const allowed = ROLE_PERMISSIONS[role || 'worker'] || ['dashboard', 'notifications'];
     if (PAGE_MAP[p]) {
-      if (allowed.includes(p)) {
-        setCurrentPage(p);
-      } else {
-        navigate(base, { replace: true });
-      }
+      setCurrentPage(p);
+    } else {
+      setCurrentPage('dashboard');
     }
-  }, [page, role, navigate, base]);
+  }, [page]);
 
   const handleNavigate = (p) => {
     setCurrentPage(p);
-    navigate(`${base}/${p}`, { replace: true });
+    navigate(`${base}/${p}`);
   };
 
   const PageComponent = PAGE_MAP[currentPage] || Dashboard;
@@ -94,20 +92,22 @@ export default function App() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        {/* Direct Access Routes (Login Bypass) */}
-        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="/login" element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        {/* Landing Page */}
+        <Route path="/" element={<Landing />} />
 
-        {/* Worker Portal Dashboard */}
+        {/* Worker Portal & Admin Login Pages */}
+        <Route path="/login" element={<WorkerLogin />} />
+        <Route path="/admin" element={<AdminLogin />} />
+
+        {/* Direct Accessible Dashboards */}
         <Route path="/dashboard" element={<DashboardRouter base="/dashboard" mode="worker" />} />
         <Route path="/dashboard/:page" element={<DashboardRouter base="/dashboard" mode="worker" />} />
 
-        {/* Admin Console Dashboard */}
         <Route path="/admin/dashboard" element={<DashboardRouter base="/admin/dashboard" mode="admin" />} />
         <Route path="/admin/dashboard/:page" element={<DashboardRouter base="/admin/dashboard" mode="admin" />} />
 
-        {/* Wildcard Fallback */}
+        {/* Wildcards */}
+        <Route path="/access-denied" element={<AccessDenied />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Routes>
     </Suspense>
